@@ -22,38 +22,84 @@ export function makeHost(options = {}) {
   const listeners = new Map()
   const routes = new Map()
   const presetCalls = []
+  const effects = []
+  const selected = new Map()
+  let admitAuto
+  let autoPresentation
+  function effect(setup) {
+    const result = setup()
+    if (typeof result === 'function') effects.push(result)
+    else {
+      const disposers = [...result]
+      effects.push(async () => {
+        for (const dispose of disposers.reverse()) await dispose()
+      })
+    }
+  }
   const ctx = {
     permissionPresets: {
-      current: () => options.currentPreset ?? 'auto',
-      set: (session, preset) => { presetCalls.push({ session, preset }) },
-      registerAuto: () => () => {},
+      current: (session) => selected.get(session) ?? (typeof options.currentPreset === 'function' ? options.currentPreset(session) : options.currentPreset ?? 'auto'),
+      set: (session, preset) => {
+        if (preset === 'auto') {
+          assertAutoRegistered()
+          admitAuto()
+        }
+        options.setPreset?.(session, preset)
+        selected.set(session, preset)
+        presetCalls.push({ session, preset })
+      },
+      registerAuto: (admit, presentation) => {
+        admitAuto = admit
+        autoPresentation = presentation
+        return () => { admitAuto = undefined }
+      },
     },
     approval: { overrideOf: () => options.approvalOverride ?? 'ask' },
     workingDirectory: { ensure: async () => '/work' },
     llm: { stream: (streamOptions) => options.stream(streamOptions) },
-    sessions: { list: () => [] },
-    root: { fiber: { state: 'inactive' } },
-    effect(setup) {
-      const generator = setup()
-      for (let step = generator.next(); !step.done; step = generator.next()) { /* disposers are not exercised */ }
-    },
-    on(event, listener) {
-      listeners.set(event, listener)
-      return () => {}
+    sessions: { list: () => options.sessions ?? [] },
+    root: { fiber: { state: 2 } },
+    effect,
+    on(event, listener, { prepend = false } = {}) {
+      const handlers = listeners.get(event) ?? []
+      handlers[prepend ? 'unshift' : 'push'](listener)
+      listeners.set(event, handlers)
+      return () => {
+        const index = handlers.indexOf(listener)
+        if (index >= 0) handlers.splice(index, 1)
+        if (handlers.length === 0) listeners.delete(event)
+      }
     },
     get(key) {
       if (key === 'profileContext') return options.profileContext
-      if (key === 'sessionQuery') return options.sessionQuery
       return undefined
     },
     inject(_dependencies, setup) {
       setup({
-        effect: (register) => register(),
-        connection: { fetch: { register: (route) => { routes.set(route.path, route); return () => {} } } },
+        effect,
+        connection: { fetch: { register: (route) => { routes.set(route.path, route); return () => routes.delete(route.path) } } },
       })
     },
   }
-  return { ctx, listeners, routes, presetCalls }
+
+  function assertAutoRegistered() {
+    if (admitAuto === undefined) throw new Error('permission: Auto is not registered')
+  }
+
+  return {
+    ctx,
+    listeners: { get: (event) => listeners.get(event)?.[0], has: (event) => listeners.has(event) },
+    routes,
+    presetCalls,
+    get autoRegistered() { return admitAuto !== undefined },
+    get autoPresentation() { return autoPresentation },
+    async emit(event, ...args) {
+      for (const listener of [...(listeners.get(event) ?? [])]) await listener(...args)
+    },
+    async dispose() {
+      while (effects.length > 0) await effects.pop()()
+    },
+  }
 }
 
 /** A session whose log holds one pending `bash` call, shaped like the host's. */

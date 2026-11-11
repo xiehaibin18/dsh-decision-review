@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, it, mock } from 'node:test'
 import { apply, readDecision } from '../index.js'
-import { makeExec, makeHost, makeProfileDir, makeSession, removeDir, silenceConsole, streamOf } from './helpers.js'
+import { makeAnswers, makeExec, makeHost, makeProfileDir, makeSession, removeDir, silenceConsole, streamOf, stubDecisionsFetch } from './helpers.js'
 
 silenceConsole()
 
@@ -121,4 +121,86 @@ describe('session engine through the approval entry point', () => {
     assert.equal(result.kind, 'deny')
     assert.equal(result.info.code, 'AUTO_REVIEW_FAILED')
   })
+})
+
+describe('effective authorization request contract', () => {
+  let profileDir
+
+  beforeEach(() => { profileDir = makeProfileDir() })
+  afterEach(() => {
+    removeDir(profileDir)
+    mock.restoreAll()
+    silenceConsole()
+  })
+
+  const user = { kind: 'user', rpcId: 'operator' }
+  const parent = { kind: 'agent-message', senderSessionId: 'parent' }
+  const grant = [user, 'user-instruction', 'Deploy blue to production once.']
+  const restriction = [user, 'user-instruction', 'Do not deploy blue to production.']
+  const parentGrant = [parent, 'direct-parent-instruction', 'Deploy blue to production once.']
+
+  const cases = [
+    { name: 'later revocation', messages: [grant, restriction], allowed: false },
+    { name: 'explicit supersession', messages: [restriction, [user, 'user-instruction', 'Lift my previous restriction and deploy blue to production once.']], allowed: true },
+    { name: 'unresolved conflict', messages: [restriction, grant], allowed: false },
+    { name: 'parent conflicts with user restriction', messages: [restriction, parentGrant], allowed: false },
+    { name: 'parent within user scope', messages: [[user, 'user-instruction', 'Limit deployments to blue.'], parentGrant], allowed: true },
+    { name: 'other context cannot grant authorization', messages: [
+      [{ kind: 'agent-instructions' }, 'constraint', 'Limit deployments to blue.'],
+      [{ kind: 'compact-checkpoint' }, 'checkpoint', 'The previous session discussed deploying blue.'],
+      [{ kind: 'agent-message', senderSessionId: 'sibling' }, 'fact', 'Deploy blue to production once.'],
+    ], allowed: false },
+  ]
+
+  function fixture(messages) {
+    const session = makeSession('review-child', { origin: 'subagent', parentSession: 'parent' })
+    const events = session.snapshotEvents()
+    const command = 'deploy --environment production --service blue'
+    events[2].data.message.content[0].arguments = JSON.stringify({ command })
+    events[3].data.arguments = JSON.stringify({ command })
+    events.splice(0, 1, ...messages.map(([source, , text]) => ({ type: 'user/message', data: { source, content: [{ type: 'text', text }] } })))
+    events.forEach((event, seq) => { event.seq = seq })
+    session.surface.nodes = [...messages.map((_, seq) => seq), events.length - 2]
+    return makeExec(session, { arguments: { command } })
+  }
+
+  async function review(engine, exec, options) {
+    fs.writeFileSync(path.join(profileDir, 'decision-review.settings.json'), JSON.stringify({ engine, denialRoute: 'final' }))
+    const host = makeHost({ profileContext: { dir: profileDir }, ...options })
+    apply(host.ctx)
+    return host.listeners.get('tools/pre-execute')(exec, async () => ({ kind: 'allow' }))
+  }
+
+  for (const { name, messages, allowed } of cases) {
+    it(`sends the same ordered evidence and authorization policy for ${name}`, async () => {
+      // Stubs exercise request assembly and result routing, not interpretation by a model.
+      const calls = stubDecisionsFetch(async () => makeAnswers({
+        risk: 'medium',
+        overrides: { explicit_authorization: { type: 'predicate', probability: allowed ? 1 : 0 } },
+      }))
+      const decisions = await review('decisions', fixture(messages))
+      let sessionRequest
+      const session = await review('session', fixture(messages), {
+        stream: (options) => {
+          sessionRequest = options
+          return streamOf([
+            { type: 'text-delta', index: 0, text: JSON.stringify({ risk: 'medium', decision: allowed ? 'allow' : 'deny' }) },
+            { type: 'finish', reason: { kind: 'stop' } },
+          ])
+        },
+      })
+      const request = calls[0].body
+      const policy = request.questions.find(({ name }) => name === 'explicit_authorization').instructions.split('\n\n').slice(1).join('\n\n')
+      assert.ok(sessionRequest.system.includes(policy), 'both engines receive the same authorization semantics')
+      assert.match(policy, /revokes, narrows or supersedes/)
+      assert.match(policy, /parent instruction.*cannot override a user restriction/)
+      assert.match(policy, /still conflict, treat authorization as absent/)
+      const retained = (parts) => parts.slice(1).map(({ text }) => JSON.parse(text))
+        .filter(({ kind }) => kind === 'user-message').map(({ source, role, content }) => [source, role, content[0].text])
+      assert.deepEqual(retained(request.input[0].content), messages)
+      assert.deepEqual(retained(sessionRequest.messages.map(({ content }) => content[0])), messages)
+      assert.equal(decisions.kind, allowed ? 'allow' : 'deny')
+      assert.equal(session.kind, decisions.kind)
+    })
+  }
 })

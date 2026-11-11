@@ -9,7 +9,7 @@ silenceConsole()
 
 const BASE = 'http://127.0.0.1:3080/api/decision-review'
 const SECRET = 'sk-stored-secret'
-const INVALID_CHOICES = { engine: 'sessoin', stateBudget: 'trimmmed', denialRoute: 'fianl' }
+const INVALID_CHOICES = { engine: 'sessoin', denialRoute: 'fianl' }
 
 describe('lenient normalization reports what it replaced', () => {
   it('falls back to the default threshold and lists the problem', () => {
@@ -96,6 +96,43 @@ describe('invalid stored settings', () => {
     assert.equal(record.decision.why.code, 'settings_invalid')
   })
 
+  it('requires explicit route repair before either a review or smoke test can contact an endpoint', async () => {
+    const invalid = { apiKey: SECRET, endpoint: ['https://review.example.test/decisions'], model: false }
+    start(invalid)
+    const calls = stubDecisionsFetch(async () => makeAnswers())
+    const config = await configuration()
+    assert.equal(config.runtime.paused, true)
+    assert.equal(config.settings.endpoint, '')
+    assert.equal(config.settings.model, '')
+    assert.match(config.problems.join(' '), /stored endpoint.*stored model/)
+    assert.equal((await review()).kind, 'deny')
+    const test = await route('test').fetch(jsonRequest(`${BASE}/test`, { scenarios: ['allow'] }))
+    assert.equal(test.status, 409)
+    const unrelatedSave = await route('save').fetch(jsonRequest(`${BASE}/save`, { settings: { tConf: 0.8 } }))
+    assert.equal(unrelatedSave.status, 400)
+    assert.deepEqual(stored(), invalid)
+    assert.equal((await configuration()).runtime.paused, true)
+    assert.equal(calls.length, 0)
+
+    const endpoint = 'https://review.example.test/decisions'
+    const repaired = await route('save').fetch(jsonRequest(`${BASE}/save`, { settings: { endpoint, model: 'review-model' } }))
+    assert.equal(repaired.status, 200)
+    assert.equal((await configuration()).runtime.paused, false)
+    assert.deepEqual(await review(), { kind: 'allow' })
+    assert.equal(calls[0].url, endpoint)
+    assert.equal(calls[0].body.model, 'review-model')
+  })
+
+  it('ignores the removed stateBudget field and drops it the next time settings are saved', async () => {
+    start({ stateBudget: 'trimmed' })
+    const config = await configuration()
+    assert.equal(config.runtime.paused, false)
+    assert.equal('stateBudget' in config.settings, false)
+    const saved = await route('save').fetch(jsonRequest(`${BASE}/save`, { settings: { model: 'review-model', stateBudget: {} } }))
+    assert.equal(saved.status, 200)
+    assert.equal('stateBudget' in stored(), false)
+  })
+
   for (const [field, bad] of [['tAuth', false], ['tAuth', true], ['tConf', []], ['tConf', {}], ['tConf', { toString: null }], ['tHighPred', 'abc'], ['tMedPred', '0x10'], ['tStrongPred', 'Infinity']]) {
     it(`treats ${field}: ${JSON.stringify(bad)} as invalid instead of coercing it`, async () => {
       start({ apiKey: SECRET, [field]: bad })
@@ -130,7 +167,7 @@ describe('invalid stored settings', () => {
   })
 
   it('rejects unrecognized choices without replacing the saved review policy', async () => {
-    const policy = { engine: 'session', stateBudget: 'trimmed', denialRoute: 'final' }
+    const policy = { engine: 'session', denialRoute: 'final' }
     start(policy)
     for (const [field, invalid] of [...Object.entries(INVALID_CHOICES), ['engine', null]]) {
       const response = await route('save').fetch(jsonRequest(`${BASE}/save`, { settings: { [field]: invalid } }))

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "决策评审",
-    "description": "逐调用 Auto review,引擎可插拔:OpenAI Decisions API(类型化谓词 + 确定性政策合成)或官方会话模型镜像评审。"
+    "description": "使用独立的 OpenAI Decisions API 或当前会话的模型评审工具调用。"
   }
 }

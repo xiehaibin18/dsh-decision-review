@@ -113,4 +113,16 @@ describe('humanWhy', () => {
     assert.match(humanWhy(undefined, 'en'), /did not approve/)
     assert.match(humanWhy({ code: 'nonexistent' }, 'zh'), /未通过/)
   })
+
+  it('describes an authorization denial without a leading risk predicate in both locales', () => {
+    for (const authorization of [{ type: 'predicate', probability: 0.25 }, { type: 'refusal' }]) {
+      const { why } = compose({ risk: 'medium', overrides: { explicit_authorization: authorization } })
+      assert.equal(why.pred, 'none')
+      const english = humanWhy(why, 'en')
+      const chinese = humanWhy(why, 'zh')
+      assert.match(english, /authorization.*classified as medium risk/)
+      assert.match(chinese, /明确授权.*中风险/)
+      assert.doesNotMatch(`${english} ${chinese}`, /undefined/)
+    }
+  })
 })
