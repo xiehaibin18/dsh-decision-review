@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { composeDecision, humanWhy, toComposeInput } from '../index.js'
+import { composeDecision, humanWhy, toComposeInput } from '../dist/index.js'
 import { makeAnswers, silenceConsole } from './helpers.js'
 
 silenceConsole()
@@ -49,11 +49,25 @@ describe('a matched deny rule', () => {
   })
 })
 
+it('does not apply an allow rule when numeric-string confidence is below the threshold', () => {
+  const rules = [{ condition: 'deploys to production', verdict: 'allow' }]
+  const decision = compose({ risk: 'medium', rule: { choice: 'r0', confidence: '0.1' } }, rules)
+  assert.equal(decision.decision, 'deny')
+  assert.equal(decision.why.code, 'authorization')
+})
+
 describe('allow_if_requested', () => {
   const matchedRule = { choice: 'r0' }
 
   it('sends a matched call to the user when the request was not made', () => {
-    const decision = compose({ risk: 'medium', overrides: { explicit_authorization: { type: 'predicate', probability: 0 } }, rule: matchedRule }, RULES)
+    const decision = compose(
+      {
+        risk: 'medium',
+        overrides: { explicit_authorization: { type: 'predicate', probability: 0 } },
+        rule: matchedRule,
+      },
+      RULES,
+    )
     assert.equal(decision.decision, 'deny')
     assert.equal(decision.risk, 'medium')
     assert.equal(decision.why.code, 'rule_unrequested')
@@ -62,31 +76,64 @@ describe('allow_if_requested', () => {
   })
 
   it('does not pre-satisfy authorization for a low-risk matched call either', () => {
-    const decision = compose({ risk: 'low', overrides: { explicit_authorization: { type: 'predicate', probability: 0.1 } }, rule: matchedRule }, RULES)
+    const decision = compose(
+      {
+        risk: 'low',
+        overrides: { explicit_authorization: { type: 'predicate', probability: 0.1 } },
+        rule: matchedRule,
+      },
+      RULES,
+    )
     assert.equal(decision.decision, 'deny')
     assert.equal(decision.why.code, 'rule_unrequested')
   })
 
   it('treats an unassessable request as not requested', () => {
-    const decision = compose({ risk: 'medium', overrides: { explicit_authorization: { type: 'refusal' } }, rule: matchedRule }, RULES)
+    const decision = compose(
+      { risk: 'medium', overrides: { explicit_authorization: { type: 'refusal' } }, rule: matchedRule },
+      RULES,
+    )
     assert.equal(decision.why.code, 'rule_unrequested')
     assert.equal(decision.why.value, null)
   })
 
   it('lets the normal flow decide once the request is real', () => {
-    const decision = compose({ risk: 'medium', overrides: { explicit_authorization: { type: 'predicate', probability: 0.9 } }, rule: matchedRule }, RULES)
+    const decision = compose(
+      {
+        risk: 'medium',
+        overrides: { explicit_authorization: { type: 'predicate', probability: 0.9 } },
+        rule: matchedRule,
+      },
+      RULES,
+    )
     assert.deepEqual(decision, { risk: 'medium', decision: 'allow' })
   })
 
   it('cannot lift the exfiltration floor', () => {
-    const decision = compose({ risk: 'low', overrides: { exfiltration: { type: 'predicate', probability: 0.95 }, explicit_authorization: { type: 'predicate', probability: 1 } }, rule: matchedRule }, RULES)
+    const decision = compose(
+      {
+        risk: 'low',
+        overrides: {
+          exfiltration: { type: 'predicate', probability: 0.95 },
+          explicit_authorization: { type: 'predicate', probability: 1 },
+        },
+        rule: matchedRule,
+      },
+      RULES,
+    )
     assert.equal(decision.why.code, 'exfiltration')
   })
 })
 
 describe('refused predicates', () => {
   it('fail closed at medium risk even when authorization and confidence pass', () => {
-    const decision = compose({ risk: 'medium', overrides: { exfiltration: { type: 'refusal' }, explicit_authorization: { type: 'predicate', probability: 0.95 } } })
+    const decision = compose({
+      risk: 'medium',
+      overrides: {
+        exfiltration: { type: 'refusal' },
+        explicit_authorization: { type: 'predicate', probability: 0.95 },
+      },
+    })
     assert.equal(decision.decision, 'deny')
     assert.deepEqual(decision.why, { code: 'refused_predicate', predicates: ['exfiltration'] })
     assert.match(humanWhy(decision.why, 'zh'), /数据外传/)
@@ -98,10 +145,23 @@ describe('refused predicates', () => {
   })
 
   it('ignore a refused operator_rule question', () => {
-    const decision = compose({ risk: 'medium', overrides: { explicit_authorization: { type: 'predicate', probability: 0.95 } }, rule: { choice: 'none' } }, RULES)
+    const decision = compose(
+      {
+        risk: 'medium',
+        overrides: { explicit_authorization: { type: 'predicate', probability: 0.95 } },
+        rule: { choice: 'none' },
+      },
+      RULES,
+    )
     assert.deepEqual(decision, { risk: 'medium', decision: 'allow' })
     const refusedRule = composeDecision(
-      toComposeInput([...makeAnswers({ risk: 'medium', overrides: { explicit_authorization: { type: 'predicate', probability: 0.95 } } }), { name: 'operator_rule', type: 'refusal' }]),
+      toComposeInput([
+        ...makeAnswers({
+          risk: 'medium',
+          overrides: { explicit_authorization: { type: 'predicate', probability: 0.95 } },
+        }),
+        { name: 'operator_rule', type: 'refusal' },
+      ]),
       { ...THRESHOLDS, rules: RULES },
     )
     assert.deepEqual(refusedRule, { risk: 'medium', decision: 'allow' })
@@ -111,6 +171,7 @@ describe('refused predicates', () => {
 describe('humanWhy', () => {
   it('falls back to a generic line for a missing or unknown reason', () => {
     assert.match(humanWhy(undefined, 'en'), /did not approve/)
+    assert.match(humanWhy(null, 'en'), /did not approve/)
     assert.match(humanWhy({ code: 'nonexistent' }, 'zh'), /未通过/)
   })
 

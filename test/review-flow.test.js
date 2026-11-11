@@ -2,8 +2,17 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, it, mock } from 'node:test'
-import { apply, createReviewTrail } from '../index.js'
-import { makeAnswers, makeExec, makeHost, makeProfileDir, makeSession, removeDir, silenceConsole, stubDecisionsFetch } from './helpers.js'
+import { apply, createReviewTrail } from '../dist/index.js'
+import {
+  makeAnswers,
+  makeExec,
+  makeHost,
+  makeProfileDir,
+  makeSession,
+  removeDir,
+  silenceConsole,
+  stubDecisionsFetch,
+} from './helpers.js'
 
 silenceConsole()
 
@@ -21,9 +30,11 @@ describe('decisions engine through the approval entry point', () => {
     silenceConsole()
   })
 
-  const writeSettings = (settings) => fs.writeFileSync(path.join(profileDir, 'decision-review.settings.json'), JSON.stringify(settings))
+  const writeSettings = (settings) =>
+    fs.writeFileSync(path.join(profileDir, 'decision-review.settings.json'), JSON.stringify(settings))
   const trail = () => createReviewTrail(profileDir)
-  const lastRecord = () => JSON.parse(fs.readFileSync(path.join(profileDir, 'decision-review.log.jsonl'), 'utf8').trim().split('\n').at(-1))
+  const lastRecord = () =>
+    JSON.parse(fs.readFileSync(path.join(profileDir, 'decision-review.log.jsonl'), 'utf8').trim().split('\n').at(-1))
 
   async function review(downstream) {
     apply(host.ctx)
@@ -39,7 +50,9 @@ describe('decisions engine through the approval entry point', () => {
   })
 
   it('does not count a reviewer denial that another layer also denied as an auto-pass', async () => {
-    stubDecisionsFetch(async () => makeAnswers({ risk: 'medium', overrides: { explicit_authorization: { type: 'predicate', probability: 0 } } }))
+    stubDecisionsFetch(async () =>
+      makeAnswers({ risk: 'medium', overrides: { explicit_authorization: { type: 'predicate', probability: 0 } } }),
+    )
     const result = await review({ kind: 'deny', reason: 'another policy denied' })
     assert.equal(result.kind, 'deny')
     const record = lastRecord()
@@ -61,7 +74,9 @@ describe('decisions engine through the approval entry point', () => {
   })
 
   it('routes a reviewer denial to the user when the rest of the chain would allow', async () => {
-    stubDecisionsFetch(async () => makeAnswers({ risk: 'medium', overrides: { explicit_authorization: { type: 'predicate', probability: 0 } } }))
+    stubDecisionsFetch(async () =>
+      makeAnswers({ risk: 'medium', overrides: { explicit_authorization: { type: 'predicate', probability: 0 } } }),
+    )
     const result = await review({ kind: 'allow' })
     assert.equal(result.kind, 'ask')
     assert.equal(lastRecord().route, 'ask')
@@ -77,7 +92,13 @@ describe('decisions engine through the approval entry point', () => {
 
   it('lets an allow_if_requested rule match reach the user when nothing was requested', async () => {
     writeSettings({ rules: [{ verdict: 'allow_if_requested', condition: 'runs the test suite' }] })
-    stubDecisionsFetch(async () => makeAnswers({ risk: 'low', overrides: { explicit_authorization: { type: 'predicate', probability: 0 } }, rule: { choice: 'r0' } }))
+    stubDecisionsFetch(async () =>
+      makeAnswers({
+        risk: 'low',
+        overrides: { explicit_authorization: { type: 'predicate', probability: 0 } },
+        rule: { choice: 'r0' },
+      }),
+    )
     const result = await review({ kind: 'allow' })
     assert.equal(result.kind, 'ask')
     assert.match(result.displayReason.en, /did not explicitly request/)
@@ -88,7 +109,10 @@ describe('decisions engine through the approval entry point', () => {
     const FINDINGS = {
       'the rule alone': { risk: 'low' },
       'a high-risk classification': { risk: 'high' },
-      'an exfiltration finding': { risk: 'medium', overrides: { exfiltration: { type: 'predicate', probability: 0.99 } } },
+      'an exfiltration finding': {
+        risk: 'medium',
+        overrides: { exfiltration: { type: 'predicate', probability: 0.99 } },
+      },
       'a refused risk classification': { overrides: { risk_class: { type: 'refusal' } } },
     }
 
@@ -117,7 +141,10 @@ describe('decisions engine through the approval entry point', () => {
     writeSettings({ timeoutMs: 7000 })
     const realTimeout = AbortSignal.timeout.bind(AbortSignal)
     const requestedTimeouts = []
-    mock.method(AbortSignal, 'timeout', (ms) => { requestedTimeouts.push(ms); return realTimeout(ms) })
+    mock.method(AbortSignal, 'timeout', (ms) => {
+      requestedTimeouts.push(ms)
+      return realTimeout(ms)
+    })
     const calls = stubDecisionsFetch(async () => makeAnswers())
     await review({ kind: 'allow' })
     assert.deepEqual(requestedTimeouts, [7000])
@@ -137,21 +164,38 @@ describe('decisions engine through the approval entry point', () => {
     events[2].data.message.content[0].arguments = args
     events[3].data.arguments = args
     for (const event of events.slice(1)) event.data.turn = 1
-    events.splice(1, 0,
+    events.splice(
+      1,
+      0,
       { type: 'step/start', data: { turn: 0, step: 0 } },
-      { type: 'assistant/message', data: { turn: 0, step: 0, message: { content: [{ type: 'tool-call', id: 'previous', name: 'bash', arguments: previousArgs }] } } },
+      {
+        type: 'assistant/message',
+        data: {
+          turn: 0,
+          step: 0,
+          message: { content: [{ type: 'tool-call', id: 'previous', name: 'bash', arguments: previousArgs }] },
+        },
+      },
       { type: 'tool/call', data: { turn: 0, step: 0, callId: 'previous', name: 'bash', arguments: previousArgs } },
       { type: 'step/end', data: { turn: 0, step: 0 } },
     )
-    events.forEach((event, seq) => { event.seq = seq })
+    events.forEach((event, seq) => {
+      event.seq = seq
+    })
     session.surface.nodes = [0, 2, 6]
     const header = session.requestHeader()
     header.tools[0].description = `${'Run commands in the workspace. '.repeat(20)} Supports external network calls.`
     session.requestHeader = () => header
-    await host.listeners.get('tools/pre-execute')(makeExec(session, { arguments: { command: longCommand } }), async () => ({ kind: 'allow' }))
+    await host.listeners.get('tools/pre-execute')(
+      makeExec(session, { arguments: { command: longCommand } }),
+      async () => ({ kind: 'allow' }),
+    )
     const [prefix, pending] = calls[0].body.input
     const items = prefix.content.slice(1).map(({ text }) => JSON.parse(text))
-    assert.deepEqual(items.map(({ kind }) => kind), ['user-message', 'tool-call', 'tool-schema'])
+    assert.deepEqual(
+      items.map(({ kind }) => kind),
+      ['user-message', 'tool-call', 'tool-schema'],
+    )
     assert.equal(items[0].content[0].text, longInstruction)
     assert.equal(items[1].arguments, previousArgs)
     assert.equal(items[2].description, header.tools[0].description)
@@ -165,7 +209,9 @@ describe('decisions engine through the approval entry point', () => {
 describe('review trail', () => {
   let profileDir
 
-  beforeEach(() => { profileDir = makeProfileDir() })
+  beforeEach(() => {
+    profileDir = makeProfileDir()
+  })
   afterEach(() => removeDir(profileDir))
 
   it('keeps a session’s counts across one log rotation', () => {

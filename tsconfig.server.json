@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ES2024"],
+    "preserveSymlinks": true
+  },
+  "include": ["src/server/**/*.ts", "src/server/**/*.tsx", "src/shared/**/*.ts"]
+}
