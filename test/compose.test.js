@@ -12,6 +12,43 @@ function compose(answerOptions, rules = []) {
   return composeDecision(toComposeInput(makeAnswers(answerOptions)), { ...THRESHOLDS, rules })
 }
 
+describe('a matched deny rule', () => {
+  const DENY_RULES = [{ condition: 'uploads credential files to an external host', verdict: 'deny' }]
+  const matched = { choice: 'r0' }
+  const exfiltrating = { exfiltration: { type: 'predicate', probability: 0.99 } }
+
+  it('is a hard refusal on its own', () => {
+    const decision = compose({ risk: 'low', rule: matched }, DENY_RULES)
+    assert.equal(decision.why.code, 'rule_deny')
+    assert.deepEqual(decision.hardDeny, { rule: 0, condition: DENY_RULES[0].condition })
+  })
+
+  it('stays a hard refusal when the call is also classified high risk', () => {
+    const decision = compose({ risk: 'high', rule: matched }, DENY_RULES)
+    assert.equal(decision.why.code, 'high_class', 'the specific finding is still reported')
+    assert.equal(decision.hardDeny.rule, 0)
+    assert.match(decision.reason, /operator rule r0 also denies/)
+  })
+
+  it('stays a hard refusal when exfiltration is also detected', () => {
+    const decision = compose({ risk: 'medium', overrides: exfiltrating, rule: matched }, DENY_RULES)
+    assert.equal(decision.why.code, 'exfiltration')
+    assert.equal(decision.hardDeny.rule, 0)
+  })
+
+  it('stays a hard refusal when the risk classification was refused', () => {
+    const decision = compose({ overrides: { risk_class: { type: 'refusal' } }, rule: matched }, DENY_RULES)
+    assert.equal(decision.why.code, 'refused_class')
+    assert.equal(decision.hardDeny.rule, 0)
+  })
+
+  it('does not bind on a low-confidence match, an ask rule or no match', () => {
+    assert.equal(compose({ risk: 'high', rule: { choice: 'r0', confidence: 0.2 } }, DENY_RULES).hardDeny, undefined)
+    assert.equal(compose({ risk: 'high', rule: matched }, [{ condition: 'x', verdict: 'ask' }]).hardDeny, undefined)
+    assert.equal(compose({ risk: 'high', rule: { choice: 'none' } }, DENY_RULES).hardDeny, undefined)
+  })
+})
+
 describe('allow_if_requested', () => {
   const matchedRule = { choice: 'r0' }
 

@@ -18,7 +18,9 @@ Settings live in `<profile>/decision-review.settings.json` (plaintext, mode `060
 
 `stateBudget: trimmed` caps only the history entries. The pending call is always sent to the reviewer whole, because the verdict must cover every byte that will execute.
 
-Saving is strict: a malformed rule line, an out-of-range `timeoutMs` or an oversized request is rejected with an explanation and nothing is written. Loading a hand-edited file is lenient: bad values fall back to defaults with a console warning, so a typo cannot disable review.
+Saving is strict: a malformed rule line, an out-of-range threshold or `timeoutMs`, or an oversized request is rejected with an explanation and nothing is written.
+
+Loading a hand-edited file never stops the plugin from starting, so the configuration page stays reachable to repair it. A value that cannot be used (a threshold outside [0,1], a bad `timeoutMs`, a rule that fails validation, a file that is not valid JSON) falls back to its default, is listed in a notice on the page and in `GET /config` (`problems`), and **pauses automatic review**: no call is allowed on the strength of substituted values, each one goes through the normal denial routing instead (a card in ask sessions, a final denial under the `never` policy or `denialRoute: final`). Saving valid settings from the page clears the notice and resumes review. If the file was not readable as a settings object, the next save first copies it to `decision-review.settings.json.invalid-<timestamp>`, so the stored key is not lost. Hand edits take effect after a plugin reload.
 
 ### HTTP API
 
@@ -26,7 +28,7 @@ The detail page talks to the host's authenticated Connection service (`connectio
 
 | route | purpose |
 |---|---|
-| `GET /api/decision-review/config` | current settings; the API key is never returned, only `hasApiKey` |
+| `GET /api/decision-review/config` | current settings; the API key is never returned, only `hasApiKey`; `problems` lists stored values that were replaced (review is paused while it is not empty) |
 | `POST /api/decision-review/save` | `{settings}` — validate strictly, merge, persist. The key is write-only: an absent or empty `apiKey` keeps the stored one, a non-empty one replaces it, `clearApiKey: true` removes it |
 | `GET /api/decision-review/stats?session=<id>` | per-session approval counts for the dock pill |
 | `POST /api/decision-review/test` | smoke test; optional `{scenarios: [...]}` of distinct built-in names (benign / exfiltration / plugin install), runs against the saved settings only |
@@ -43,8 +45,9 @@ The bundle also observes the `approval/request` waterfall without answering, app
 
 `settings.rules` holds operator-authored natural-language rules, `{condition, verdict}` pairs edited from the config panel (one `verdict|condition` per line, ASCII `|` or full-width `｜`, any letter case; verdict ∈ `allow` / `allow_if_requested` / `ask` / `deny`, max 20 rules / 2000 condition chars). A line that does not parse is reported with its line number and blocks the save. Rules are reviewer-side only — the agent and the session context never see them, and with the plugin off they do not exist.
 
-- **Decisions engine**: rules ride a dynamic `operator_rule` choice question appended per request (options `none` + one per rule). The model only answers which rule condition matches — with confidence and refusal semantics — and the compose layer applies the operator's stored verdict deterministically: `allow` returns an auto-allow (operator pre-authorization), `allow_if_requested` is a real gate — it allows only when the user's explicit-authorization score reaches `tAuth`, otherwise it returns a medium deny (`rule_unrequested`) that is routed to the user, `ask` returns a medium deny routed to the user, `deny` returns a hard final deny regardless of `denialRoute`. A low-confidence match, `none`, or refusal falls back to the base predicates; the exfiltration hard line and the `high` class are not overridable by rules.
-- **Session engine**: rules are appended to the session reviewer's system policy as an authoritative section, and the model reflects a matched rule's verdict in its risk/decision answer directly (no separate matching question exists in that protocol).
+- **Decisions engine**: rules ride a dynamic `operator_rule` choice question appended per request (options `none` + one per rule). The model only answers which rule condition matches — with confidence and refusal semantics — and the compose layer applies the operator's stored verdict deterministically: `allow` returns an auto-allow (operator pre-authorization), `allow_if_requested` is a real gate — it allows only when the user's explicit-authorization score reaches `tAuth`, otherwise it returns a medium deny (`rule_unrequested`) that is routed to the user, `ask` returns a medium deny routed to the user, `deny` is a hard refusal. A low-confidence match, `none`, or refusal falls back to the base predicates; the exfiltration hard line and the `high` class are not overridable by rules.
+- **Hard refusal**: a matched `deny` rule marks the decision `hardDeny`, separately from the finding that supplies the reason. Whatever else the reviewer found (a high-risk class, exfiltration, a refused classification), the call is closed with a final denial and never becomes an approval card, even under `denialRoute: ask`; the trail record keeps both the specific finding and the rule.
+- **Session engine**: rules are appended to the session reviewer's system policy as an authoritative section, and the model reflects a matched rule's verdict in its risk/decision answer directly (no separate matching question exists in that protocol). Because the plugin cannot tell which rule the model applied, a `deny` rule there is advice to the reviewer rather than a hard refusal: its denial follows `denialRoute` like any other. Use the decisions engine when a rule must be absolute.
 
 ## Semantics kept from the official plugin
 
@@ -68,4 +71,4 @@ The bundle also observes the `approval/request` waterfall without answering, app
 npm test   # node --test "test/*.test.js"; no dependencies (run on Node 24)
 ```
 
-The suite covers the compose rules, Decisions response validation, settings normalization, the session engine against the host stream protocol, the Connection routes, the approval flow with the review trail, a host-integration double for `apply()`, and the Web UI panel through a fake renderer. It uses doubles for the host, so it does not replace a live check: after changing the bundle, reload the plugin, reload the Web page, and run the smoke test from the plugins page (decisions engine). Recorded playground calibration data lives in `~/.dsh/auto-review-mock/` (Jev and OpenAI A/B/C scenarios, thresholds v0.2 derivation).
+The suite covers the compose rules (including the hard refusal), Decisions response validation, settings normalization and the paused-review behaviour for invalid stored settings, the session engine against the host stream protocol, the Connection routes, the approval flow with the review trail, a host-integration double for `apply()`, and the Web UI panel through a fake renderer. It uses doubles for the host, so it does not replace a live check: after changing the bundle, reload the plugin, reload the Web page, and run the smoke test from the plugins page (decisions engine). Recorded playground calibration data lives in `~/.dsh/auto-review-mock/` (Jev and OpenAI A/B/C scenarios, thresholds v0.2 derivation).

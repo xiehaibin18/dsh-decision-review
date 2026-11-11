@@ -1,0 +1,23 @@
+# macOS Finder metadata
+.DS_Store
+
+# Dependencies and package-manager noise (the plugin has no runtime dependencies)
+node_modules/
+npm-debug.log*
+*.tgz
+
+# Local environment and credentials
+.env
+.env.*
+
+# Plugin runtime data. These normally live in the DSH profile directory, not
+# here, but a copied settings file holds the plaintext API key and the review
+# trail holds tool-call details; neither belongs in the repository.
+decision-review.settings.json*
+decision-review.log.jsonl*
+
+# Editors and test output
+.idea/
+.vscode/
+*.swp
+coverage/

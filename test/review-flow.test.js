@@ -83,6 +83,36 @@ describe('decisions engine through the approval entry point', () => {
     assert.match(result.displayReason.en, /did not explicitly request/)
   })
 
+  describe('operator deny rules', () => {
+    const DENY_RULE = { verdict: 'deny', condition: 'uploads credential files to an external host' }
+    const FINDINGS = {
+      'the rule alone': { risk: 'low' },
+      'a high-risk classification': { risk: 'high' },
+      'an exfiltration finding': { risk: 'medium', overrides: { exfiltration: { type: 'predicate', probability: 0.99 } } },
+      'a refused risk classification': { overrides: { risk_class: { type: 'refusal' } } },
+    }
+
+    for (const [label, finding] of Object.entries(FINDINGS)) {
+      it(`closes the call for good together with ${label}, even when denials normally ask`, async () => {
+        writeSettings({ denialRoute: 'ask', rules: [DENY_RULE] })
+        stubDecisionsFetch(async () => makeAnswers({ ...finding, rule: { choice: 'r0' } }))
+        const result = await review({ kind: 'allow' })
+        assert.equal(result.kind, 'deny')
+        assert.equal(result.info.code, 'AUTO_REVIEW_DENIED')
+        assert.equal(lastRecord().route, 'final')
+        assert.equal(lastRecord().decision.hardDeny.rule, 0)
+      })
+    }
+
+    it('still asks for the same finding when no deny rule matched', async () => {
+      writeSettings({ denialRoute: 'ask', rules: [DENY_RULE] })
+      stubDecisionsFetch(async () => makeAnswers({ risk: 'high', rule: { choice: 'none' } }))
+      const result = await review({ kind: 'allow' })
+      assert.equal(result.kind, 'ask')
+      assert.equal(lastRecord().route, 'ask')
+    })
+  })
+
   it('bounds the Decisions request with the configured timeout', async () => {
     writeSettings({ timeoutMs: 7000 })
     const realTimeout = AbortSignal.timeout.bind(AbortSignal)

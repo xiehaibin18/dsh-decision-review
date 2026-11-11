@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { afterEach, beforeEach, describe, it, mock } from 'node:test'
+import { after, afterEach, before, beforeEach, describe, it, mock } from 'node:test'
 
 /* The client half is a browser script over React and the host's slot/locale
  * services. These tests run its configuration panel on a minimal hook
@@ -109,13 +109,17 @@ describe('configuration panel', () => {
   let requests
   let saveGate
   let serverSettings
+  let serverProblems
+  let rowConfig
+  // Set by suites that need to prepare the server's answer before the panel mounts.
+  let deferMount = false
 
   beforeEach(async () => {
     renderer = createRenderer()
     requests = []
     saveGate = undefined
     serverSettings = { ...SERVER_SETTINGS }
-    let rowConfig
+    serverProblems = []
     globalThis.window = {
       __ModuleLoader__: {
         load(definition) {
@@ -137,19 +141,21 @@ describe('configuration panel', () => {
       const body = init?.body === undefined ? undefined : JSON.parse(init.body)
       requests.push({ url, method: init?.method ?? 'GET', headers: init?.headers, body })
       const reply = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } })
-      if (url.endsWith('/config')) return reply({ settings: serverSettings, runtime: { engine: 'decisions', accepting: true, active: 0 } })
+      if (url.endsWith('/config')) return reply({ settings: serverSettings, problems: serverProblems, runtime: { engine: 'decisions', accepting: true, active: 0 } })
       if (url.endsWith('/save')) {
         if (saveGate) await saveGate
         const { apiKey, clearApiKey, ...fields } = body.settings
         serverSettings = { ...serverSettings, ...fields, hasApiKey: clearApiKey ? false : (apiKey ? true : serverSettings.hasApiKey) }
-        return reply({ ok: true, settings: serverSettings })
+        return reply({ ok: true, settings: serverSettings, problems: [] })
       }
       if (url.endsWith('/test')) return reply({ ok: true, results: [] })
       return reply({ error: 'unknown' }, 404)
     })
     await import(`../client.js?run=${Math.random()}`)
-    renderer.mount(rowConfig, { view: 'page' })
-    await settle()
+    if (!deferMount) {
+      renderer.mount(rowConfig, { view: 'page' })
+      await settle()
+    }
   })
   afterEach(() => {
     delete globalThis.window
@@ -157,6 +163,34 @@ describe('configuration panel', () => {
   })
 
   const saveRequests = () => requests.filter((request) => request.url.endsWith('/save'))
+
+  describe('invalid stored settings', () => {
+    before(() => { deferMount = true })
+    after(() => { deferMount = false })
+    const open = async (problems) => {
+      serverProblems = problems
+      renderer.mount(rowConfig, { view: 'page' })
+      await settle()
+    }
+
+    it('explains why automatic review is paused', async () => {
+      await open(['stored tConf is not a number in [0,1]; the default 0.75 is shown'])
+      assert.match(renderer.text(), /problems\.title/)
+      assert.match(renderer.text(), /stored tConf is not a number/)
+    })
+
+    it('drops the notice once a save succeeds', async () => {
+      await open(['stored tConf is not a number in [0,1]; the default 0.75 is shown'])
+      renderer.control('model.label').props.onChange({ target: { value: 'model-b' } })
+      await renderer.button('save').props.onClick()
+      assert.doesNotMatch(renderer.text(), /problems\.title/)
+    })
+
+    it('shows no notice for healthy settings', async () => {
+      await open([])
+      assert.doesNotMatch(renderer.text(), /problems\.title/)
+    })
+  })
 
   it('loads through the authenticated route without ever holding the stored key', () => {
     assert.equal(requests[0].url, '/api/decision-review/config')

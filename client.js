@@ -59,6 +59,7 @@ window.__ModuleLoader__.load({
       'runtime.label': 'Runtime',
       'runtime.accepting': 'accepting reviews',
       'runtime.closed': 'closing',
+      'problems.title': 'The stored settings are invalid, so automatic review is paused and every call asks you. Review the values below and save to resume:',
       'risk.allow': 'ALLOW',
       'risk.deny': 'DENY',
       'rules.label': 'Operator rules',
@@ -110,6 +111,7 @@ window.__ModuleLoader__.load({
       'runtime.label': '运行时',
       'runtime.accepting': '正在受理评审',
       'runtime.closed': '关闭中',
+      'problems.title': '已保存的配置无效，自动评审已暂停，每次调用都会询问你。请检查下方各项并保存以恢复：',
       'risk.allow': '放行',
       'risk.deny': '拒绝',
       'rules.label': '操作者规则',
@@ -212,6 +214,7 @@ window.__ModuleLoader__.load({
       const t = props.t;
       const [settings, setSettings] = React.useState(null);
       const [runtime, setRuntime] = React.useState(null);
+      const [problems, setProblems] = React.useState([]);
       const [error, setError] = React.useState(null);
       const [saving, setSaving] = React.useState(false);
       const [savedAt, setSavedAt] = React.useState(0);
@@ -235,6 +238,7 @@ window.__ModuleLoader__.load({
         setClearKey(false);
         setBaseline(formSnapshot(loaded, text, '', false));
         setRuntime(payload.runtime);
+        setProblems(Array.isArray(payload.problems) ? payload.problems : []);
         setError(null);
       }
 
@@ -275,6 +279,7 @@ window.__ModuleLoader__.load({
           }
           setSavedAt(Date.now());
           setError(null);
+          setProblems(Array.isArray(payload.problems) ? payload.problems : []);
           setRuntime(function (prev) { return { ...(prev ?? {}), engine: saved.engine }; });
         } catch (err) {
           setError(t('save.error') + ': ' + errorText(err));
@@ -323,6 +328,9 @@ window.__ModuleLoader__.load({
         h('div', { style: { fontSize: 11, marginBottom: 10, color: 'var(--dsw-alias-label-tertiary, #999)' } },
           t('runtime.label') + ': ' + (runtime ? (runtime.accepting ? t('runtime.accepting') : t('runtime.closed')) : '…')
           + (runtime && runtime.active ? (' · ' + runtime.active) : '')),
+        problems.length > 0 ? h('div', { style: { fontSize: 12, marginBottom: 10, color: 'var(--dsw-alias-state-danger-primary, #e5534b)' } },
+          h('div', { style: { fontWeight: 600 } }, t('problems.title')),
+          h('ul', { style: { margin: '4px 0 0', paddingLeft: 18 } }, problems.map(function (text, i) { return h('li', { key: i }, text); }))) : null,
 
         h(Field, { label: t('engine.label') },
           h('select', {

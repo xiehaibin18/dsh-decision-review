@@ -173,12 +173,23 @@ export function createReviewTrail(profileDirectory) {
   return { record, stats }
 }
 
-/** Validate one numeric threshold into [0,1]. */
-function num(value, fallback, field) {
+/** Record one rejected stored value. A stored value that had to be replaced
+ * pauses automatic review (see `apply`) until valid settings are saved, so the
+ * problem list is what the configuration page shows. */
+function reportStoredProblem(problems, message) {
+  problems.push(message)
+  console.warn(`[decision-review] ${message}`)
+}
+
+/** Validate one numeric threshold into [0,1]. Strict mode (user saves) throws;
+ * lenient mode (a stored file) falls back to the default and reports it. */
+function num(value, fallback, field, { strict, problems }) {
   if (value === undefined || value === null || value === '') return fallback
   const n = Number(value)
-  if (!Number.isFinite(n) || n < 0 || n > 1) throw new Error(`decision-review: ${field} must be a number in [0,1]`)
-  return n
+  if (Number.isFinite(n) && n >= 0 && n <= 1) return n
+  if (strict) throw new Error(`decision-review: ${field} must be a number in [0,1]`)
+  reportStoredProblem(problems, `stored ${field} is not a number in [0,1]; the default ${fallback} is shown`)
+  return fallback
 }
 
 const RULE_VERDICTS = ['allow', 'allow_if_requested', 'ask', 'deny']
@@ -199,12 +210,13 @@ function ruleProblem(item, count, total) {
 
 /** Normalize the operator rule list. Strict mode (user saves) rejects a bad
  * rule so it can never vanish silently; lenient mode (reading a stored file)
- * drops it with a warning so a hand-edit typo cannot keep the plugin from
- * loading. */
-function normalizeRules(raw, strict) {
+ * drops it and reports it, so a hand-edit typo cannot keep the plugin from
+ * loading while review stays paused until the list is saved again. */
+function normalizeRules(raw, strict, problems) {
   if (raw === undefined || raw === null) return []
   if (!Array.isArray(raw)) {
     if (strict) throw new Error('decision-review: rules must be a list')
+    reportStoredProblem(problems, 'stored rules are not a list; all rules were ignored')
     return []
   }
   const out = []
@@ -213,7 +225,7 @@ function normalizeRules(raw, strict) {
     const problem = ruleProblem(item, out.length, total)
     if (problem !== null) {
       if (strict) throw new Error(`decision-review: rule ${position + 1} ${problem}`)
-      console.warn(`[decision-review] dropped stored rule ${position + 1}: ${problem}`)
+      reportStoredProblem(problems, `stored rule ${position + 1} was dropped: it ${problem}`)
       return
     }
     const condition = item.condition.trim()
@@ -224,26 +236,28 @@ function normalizeRules(raw, strict) {
 }
 
 /** Validate the request timeout: an integer the Abort timer accepts. */
-function normalizeTimeout(value, strict) {
+function normalizeTimeout(value, strict, problems) {
   if (value === undefined || value === null || value === '') return SETTINGS_DEFAULTS.timeoutMs
   const n = Number(value)
   if (Number.isInteger(n) && n >= TIMEOUT_MIN_MS && n <= TIMEOUT_MAX_MS) return n
   if (strict) throw new Error(`decision-review: timeoutMs must be an integer between ${TIMEOUT_MIN_MS} and ${TIMEOUT_MAX_MS}`)
-  console.warn(`[decision-review] ignored stored timeoutMs ${String(value)}; using ${SETTINGS_DEFAULTS.timeoutMs}`)
+  reportStoredProblem(problems, `stored timeoutMs ${String(value)} is not an integer between ${TIMEOUT_MIN_MS} and ${TIMEOUT_MAX_MS}; the default ${SETTINGS_DEFAULTS.timeoutMs} is shown`)
   return SETTINGS_DEFAULTS.timeoutMs
 }
 
 /** Merge raw user input over defaults with validation; unknown keys are
- * dropped. `strict` makes bad rules and timeouts throw instead of falling back. */
-export function normalizeSettings(raw, { strict = false } = {}) {
+ * dropped. `strict` makes bad rules, timeouts and thresholds throw; otherwise
+ * they fall back to defaults and each fallback is appended to `problems`. */
+export function normalizeSettings(raw, { strict = false, problems = [] } = {}) {
   const src = raw && typeof raw === 'object' ? raw : {}
+  const mode = { strict, problems }
   const engine = src.engine === 'session' ? 'session' : 'decisions'
   const endpoint = typeof src.endpoint === 'string' && src.endpoint.trim() !== ''
     ? src.endpoint.trim()
     : SETTINGS_DEFAULTS.endpoint
   const model = typeof src.model === 'string' && src.model.trim() !== '' ? src.model.trim() : SETTINGS_DEFAULTS.model
   const stateBudget = src.stateBudget === 'trimmed' ? 'trimmed' : 'full'
-  const timeoutMs = normalizeTimeout(src.timeoutMs, strict)
+  const timeoutMs = normalizeTimeout(src.timeoutMs, strict, problems)
   const denialRoute = src.denialRoute === 'final' ? 'final' : 'ask'
   return {
     engine,
@@ -253,22 +267,45 @@ export function normalizeSettings(raw, { strict = false } = {}) {
     stateBudget,
     timeoutMs,
     denialRoute,
-    tConf: num(src.tConf, SETTINGS_DEFAULTS.tConf, 'tConf'),
-    tHighPred: num(src.tHighPred, SETTINGS_DEFAULTS.tHighPred, 'tHighPred'),
-    tMedPred: num(src.tMedPred, SETTINGS_DEFAULTS.tMedPred, 'tMedPred'),
-    tStrongPred: num(src.tStrongPred, SETTINGS_DEFAULTS.tStrongPred, 'tStrongPred'),
-    tAuth: num(src.tAuth, SETTINGS_DEFAULTS.tAuth, 'tAuth'),
-    rules: normalizeRules(src.rules, strict),
+    tConf: num(src.tConf, SETTINGS_DEFAULTS.tConf, 'tConf', mode),
+    tHighPred: num(src.tHighPred, SETTINGS_DEFAULTS.tHighPred, 'tHighPred', mode),
+    tMedPred: num(src.tMedPred, SETTINGS_DEFAULTS.tMedPred, 'tMedPred', mode),
+    tStrongPred: num(src.tStrongPred, SETTINGS_DEFAULTS.tStrongPred, 'tStrongPred', mode),
+    tAuth: num(src.tAuth, SETTINGS_DEFAULTS.tAuth, 'tAuth', mode),
+    rules: normalizeRules(src.rules, strict, problems),
   }
 }
 
+/** Read the stored settings without ever throwing: the configuration page must
+ * stay reachable to repair a bad file. Whatever could not be used is listed in
+ * `problems` (the plugin pauses automatic review while any exist), and
+ * `damaged` marks a file that could not be read as a settings object at all,
+ * which the next save backs up before replacing. A missing file is normal. */
 function loadSettings(settingsPath) {
+  let text
   try {
-    return normalizeSettings(JSON.parse(fs.readFileSync(settingsPath, 'utf8')))
+    text = fs.readFileSync(settingsPath, 'utf8')
   } catch (error) {
-    if (error && error.code === 'ENOENT') return normalizeSettings(undefined)
-    throw error
+    if (error && error.code === 'ENOENT') return { settings: normalizeSettings(undefined), problems: [], damaged: false }
+    const message = `the stored settings file could not be read (${error instanceof Error ? error.message : String(error)}); defaults are shown`
+    console.warn(`[decision-review] ${message}`)
+    return { settings: normalizeSettings(undefined), problems: [message], damaged: true }
   }
+  let raw
+  try {
+    raw = JSON.parse(text)
+  } catch (error) {
+    const message = `the stored settings file is not valid JSON (${error instanceof Error ? error.message : String(error)}); defaults are shown`
+    console.warn(`[decision-review] ${message}`)
+    return { settings: normalizeSettings(undefined), problems: [message], damaged: true }
+  }
+  if (!isRecord(raw)) {
+    const message = 'the stored settings file does not hold a JSON object; defaults are shown'
+    console.warn(`[decision-review] ${message}`)
+    return { settings: normalizeSettings(undefined), problems: [message], damaged: true }
+  }
+  const problems = []
+  return { settings: normalizeSettings(raw, { problems }), problems, damaged: false }
 }
 
 function saveSettings(settingsPath, next) {
@@ -888,8 +925,13 @@ export function validateAnswers(payload, rules) {
 export function toComposeInput(answers) {
   const byName = Object.fromEntries(answers.map((x) => [x.name, x]))
   const refused = answers.filter((x) => x.type === 'refusal').map((x) => x.name)
+  // The rule answer is independent of the risk classification, so it is kept
+  // even when the classification was refused: a matched deny rule must still bind.
+  const ruleMatch = byName.operator_rule && byName.operator_rule.type === 'choice'
+    ? { value: byName.operator_rule.choice, confidence: byName.operator_rule.confidence }
+    : null
   if (!byName.risk_class || byName.risk_class.type === 'refusal') {
-    return { risk_class: null, refused }
+    return { risk_class: null, ruleMatch, refused }
   }
   const rc = byName.risk_class
   const probabilities = {}
@@ -906,9 +948,7 @@ export function toComposeInput(answers) {
     security_change: predicate('security_change'),
     session_created_cleanup: predicate('session_created_cleanup'),
     explicit_authorization: predicate('explicit_authorization'),
-    ruleMatch: byName.operator_rule && byName.operator_rule.type === 'choice'
-      ? { value: byName.operator_rule.choice, confidence: byName.operator_rule.confidence }
-      : null,
+    ruleMatch,
     refused,
   }
 }
@@ -952,6 +992,31 @@ function operatorRulesSection(rules) {
  * both the raw model-facing reason and the localized card copy.
  */
 export function composeDecision(a, t) {
+  const decision = composeVerdict(a, t)
+  const matched = matchedRule(a, t)
+  if (matched === null || matched.rule.verdict !== 'deny') return decision
+  // A matched `deny` rule is the operator's hard refusal. The risk floors in
+  // composeVerdict may report a more specific reason first, but they must not
+  // swallow the rule: `hardDeny` is a separate marker that the approval
+  // routing reads, so no combination of findings can turn it into a card the
+  // user could approve.
+  const hardDeny = { rule: matched.index, condition: matched.condition }
+  if (decision.why?.code === 'rule_deny') return { ...decision, hardDeny }
+  return { ...decision, reason: `${decision.reason}; operator rule r${matched.index} also denies this call`, hardDeny }
+}
+
+/** The operator rule a confident `operator_rule` answer selects, or null. */
+function matchedRule(a, t) {
+  const match = a.ruleMatch
+  if (!match || typeof match.value !== 'string' || match.value === 'none' || (match.confidence ?? 1) < t.tConf) return null
+  const index = Number(match.value.slice(1))
+  const rule = Array.isArray(t.rules) ? t.rules[index] : undefined
+  if (!rule) return null
+  const condition = rule.condition.length > 120 ? `${rule.condition.slice(0, 120)}…` : rule.condition
+  return { index, rule, condition }
+}
+
+function composeVerdict(a, t) {
   if (!a.risk_class) {
     return { risk: 'high', decision: 'deny', reason: 'reviewer refused the risk classification', why: { code: 'refused_class' } }
   }
@@ -967,28 +1032,24 @@ export function composeDecision(a, t) {
   // call goes to the user) and then falls through to the normal flow; ask and
   // deny return the operator's fixed verdicts. The exfiltration and
   // high-class floors above are not overridable by rules.
-  const match = a.ruleMatch
-  if (match && typeof match.value === 'string' && match.value !== 'none' && (match.confidence ?? 1) >= t.tConf) {
-    const index = Number(match.value.slice(1))
-    const rule = Array.isArray(t.rules) ? t.rules[index] : undefined
-    if (rule) {
-      const condition = rule.condition.length > 120 ? `${rule.condition.slice(0, 120)}…` : rule.condition
-      if (rule.verdict === 'deny') {
-        return { risk: 'high', decision: 'deny', reason: `operator rule r${index} denies this call`, why: { code: 'rule_deny', rule: index, condition } }
-      }
-      if (rule.verdict === 'ask') {
-        return { risk: 'medium', decision: 'deny', reason: `operator rule r${index} requires user adjudication`, why: { code: 'rule_ask', rule: index, condition } }
-      }
-      if (rule.verdict === 'allow') {
-        return { risk: 'low', decision: 'allow', reason: `operator rule r${index} authorizes this call`, why: { code: 'rule_allow', rule: index, condition } }
-      }
-      if (a.explicit_authorization === null || a.explicit_authorization < t.tAuth) {
-        return {
-          risk: 'medium',
-          decision: 'deny',
-          reason: `operator rule r${index} allows this call only when requested; explicit_authorization=${a.explicit_authorization} < ${t.tAuth}`,
-          why: { code: 'rule_unrequested', rule: index, condition, value: a.explicit_authorization, threshold: t.tAuth },
-        }
+  const matched = matchedRule(a, t)
+  if (matched !== null) {
+    const { index, rule, condition } = matched
+    if (rule.verdict === 'deny') {
+      return { risk: 'high', decision: 'deny', reason: `operator rule r${index} denies this call`, why: { code: 'rule_deny', rule: index, condition } }
+    }
+    if (rule.verdict === 'ask') {
+      return { risk: 'medium', decision: 'deny', reason: `operator rule r${index} requires user adjudication`, why: { code: 'rule_ask', rule: index, condition } }
+    }
+    if (rule.verdict === 'allow') {
+      return { risk: 'low', decision: 'allow', reason: `operator rule r${index} authorizes this call`, why: { code: 'rule_allow', rule: index, condition } }
+    }
+    if (a.explicit_authorization === null || a.explicit_authorization < t.tAuth) {
+      return {
+        risk: 'medium',
+        decision: 'deny',
+        reason: `operator rule r${index} allows this call only when requested; explicit_authorization=${a.explicit_authorization} < ${t.tAuth}`,
+        why: { code: 'rule_unrequested', rule: index, condition, value: a.explicit_authorization, threshold: t.tAuth },
       }
     }
   }
@@ -1153,6 +1214,7 @@ const WHY_TEXT = {
       ? `operator rule matched (${w.condition}), but whether you requested this could not be assessed`
       : `operator rule matched (${w.condition}), but you did not explicitly request this (${fmtScore(w.value)} < ${fmtScore(w.threshold)})`,
     session_denied: (w) => `the session reviewer denied this call as ${w.risk} risk${w.reason ? `: ${w.reason}` : ''}`,
+    settings_invalid: (w) => `the stored settings are invalid, so automatic review is paused until valid settings are saved (${w.problems[0]})`,
   },
   zh: {
     refused_class: () => '评审员拒绝给出风险分类',
@@ -1171,6 +1233,7 @@ const WHY_TEXT = {
       ? `命中操作者规则（${w.condition}），但无法评估你是否明确要求过此操作`
       : `命中操作者规则（${w.condition}），但未见你明确要求此操作（${fmtScore(w.value)} < ${fmtScore(w.threshold)}）`,
     session_denied: (w) => `会话评审员判定为${w.risk === 'high' ? '高' : '中'}风险并拒绝${w.reason ? `：${w.reason}` : ''}`,
+    settings_invalid: (w) => `已保存的配置无效，自动评审已暂停，保存有效配置后恢复（${w.problems[0]}）`,
   },
 }
 
@@ -1232,6 +1295,29 @@ function askUser(exec, decision) {
       en: `${humanWhy(decision.why, 'en')} ${content.en}`.trim(),
       zh: `${humanWhy(decision.why, 'zh')} ${content.zh}`.trim(),
     },
+  }
+}
+
+/** The verdict used while the stored settings are invalid: nothing is allowed
+ * automatically, and each call goes through the normal denial routing (a card
+ * in ask sessions, a final denial under the never policy or denialRoute final). */
+function settingsInvalidDecision(problems) {
+  return {
+    risk: 'medium',
+    decision: 'deny',
+    reason: `stored settings are invalid, automatic review is paused: ${problems.join('; ')}`,
+    why: { code: 'settings_invalid', problems },
+  }
+}
+
+/** Keep a copy of a settings file that could not be read before the next save
+ * replaces it, so a repair never destroys the only copy of a stored key. */
+function backUpDamagedSettings(settingsPath) {
+  try {
+    fs.copyFileSync(settingsPath, `${settingsPath}.invalid-${Date.now()}`)
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return
+    throw new RequestError(500, `could not back up the unreadable settings file first: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -1355,7 +1441,10 @@ export function apply(ctx) {
   const profileDirectory = resolveProfileDir(ctx)
   const settingsPath = `${profileDirectory}/${SETTINGS_FILE}`
   const trail = createReviewTrail(profileDirectory)
-  const holder = { settings: loadSettings(settingsPath) }
+  const loaded = loadSettings(settingsPath)
+  // `problems` lists stored values that had to be replaced; while it is not
+  // empty, automatic review is paused (see the pre-execute listener).
+  const holder = { settings: loaded.settings, problems: loaded.problems, damaged: loaded.damaged }
   let accepting = true
   const active = new Set()
   const lifecycle = new AbortController()
@@ -1370,7 +1459,8 @@ export function apply(ctx) {
       methods: ['GET'],
       handle: async () => jsonResponse({
         settings: publicSettings(holder.settings),
-        runtime: { engine: holder.settings.engine, accepting, active: active.size },
+        problems: holder.problems,
+        runtime: { engine: holder.settings.engine, accepting, active: active.size, paused: holder.problems.length > 0 },
       }),
     },
     {
@@ -1385,9 +1475,12 @@ export function apply(ctx) {
         } catch (error) {
           throw new RequestError(400, error instanceof Error ? error.message : String(error))
         }
+        if (holder.damaged) backUpDamagedSettings(settingsPath)
         saveSettings(settingsPath, next)
         holder.settings = next
-        return jsonResponse({ ok: true, settings: publicSettings(next) })
+        holder.problems = []
+        holder.damaged = false
+        return jsonResponse({ ok: true, settings: publicSettings(next), problems: [] })
       },
     },
     {
@@ -1436,7 +1529,7 @@ export function apply(ctx) {
       const completed = Promise.withResolvers()
       active.add(completed.promise)
       try {
-        const settings = holder.settings
+        const { settings, problems } = holder
         const signal = AbortSignal.any([exec.signal, lifecycle.signal])
         let shown = shownBySession.get(agent.session)
         if (shown === undefined) {
@@ -1452,13 +1545,17 @@ export function apply(ctx) {
           shown.set(snapshot.pending.key, snapshot.pending.schema)
           return next()
         }
-        const review = await (settings.engine === 'session'
-          ? sessionClassifyRisk(ctx, agent, exec, signal, shown, settings)
-          : decisionsClassifyRisk(ctx, agent, exec, signal, shown, settings)
-        ).then(
-          (value) => ({ ok: true, value }),
-          (error) => ({ ok: false, error }),
-        )
+        // Invalid stored settings pause automatic review: nothing is allowed
+        // on the strength of values that were replaced by defaults.
+        const review = problems.length > 0
+          ? { ok: true, value: { decision: settingsInvalidDecision(problems), telemetry: { ms: 0, answers: null, usage: null } } }
+          : await (settings.engine === 'session'
+            ? sessionClassifyRisk(ctx, agent, exec, signal, shown, settings)
+            : decisionsClassifyRisk(ctx, agent, exec, signal, shown, settings)
+          ).then(
+            (value) => ({ ok: true, value }),
+            (error) => ({ ok: false, error }),
+          )
         if (isAborted(lifecycle.signal)) return { kind: 'cancel' }
         if (!review.ok) {
           trail.record({ event: 'review', session: agent.session.id, engine: settings.engine, tool: exec.name, callId: exec.callId, route: 'fail', error: review.error instanceof Error ? review.error.message : String(review.error) })
@@ -1473,10 +1570,12 @@ export function apply(ctx) {
         if (decision.decision === 'deny') {
           // Denial routing: 'final' always closes here (reason feeds back to the
           // model, which may adapt); 'ask' defers to the session approval policy
-          // — ask sessions prompt the user, never sessions final-deny.
+          // — ask sessions prompt the user, never sessions final-deny. A matched
+          // operator deny rule (`hardDeny`) always closes here, whatever other
+          // finding supplied the reason.
           const routeFinal = settings.denialRoute === 'final'
             || ctx.approval.overrideOf(agent.session) === 'never'
-            || decision.why?.code === 'rule_deny'
+            || decision.hardDeny !== undefined
           if (routeFinal) {
             record('final')
             return denied(exec, decision.reason)
@@ -1576,5 +1675,8 @@ export function apply(ctx) {
     }
   })
 
+  if (holder.problems.length > 0) {
+    console.warn(`[decision-review] automatic review is PAUSED until valid settings are saved from the plugin page: ${holder.problems.join('; ')}`)
+  }
   console.info(`[decision-review] ready: engine=${holder.settings.engine} endpoint=${holder.settings.endpoint}`)
 }
