@@ -181,6 +181,16 @@ function reportStoredProblem(problems, message) {
   console.warn(`[decision-review] ${message}`)
 }
 
+function normalizeChoice(value, field, choices, { strict, problems }) {
+  const fallback = SETTINGS_DEFAULTS[field]
+  if (value === undefined) return fallback
+  if (choices.includes(value)) return value
+  const requirement = `must be one of ${choices.join(', ')}`
+  if (strict) throw new Error(`decision-review: ${field} ${requirement}`)
+  reportStoredProblem(problems, `stored ${field} ${requirement}; the default ${fallback} is shown`)
+  return fallback
+}
+
 const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i
 
 /** The number a stored or submitted value stands for: a finite number or a
@@ -260,19 +270,19 @@ function normalizeTimeout(value, strict, problems) {
 }
 
 /** Merge raw user input over defaults with validation; unknown keys are
- * dropped. `strict` makes bad rules, timeouts and thresholds throw; otherwise
+ * dropped. `strict` rejects invalid values in validated fields; otherwise
  * they fall back to defaults and each fallback is appended to `problems`. */
 export function normalizeSettings(raw, { strict = false, problems = [] } = {}) {
   const src = raw && typeof raw === 'object' ? raw : {}
   const mode = { strict, problems }
-  const engine = src.engine === 'session' ? 'session' : 'decisions'
+  const engine = normalizeChoice(src.engine, 'engine', ['decisions', 'session'], mode)
   const endpoint = typeof src.endpoint === 'string' && src.endpoint.trim() !== ''
     ? src.endpoint.trim()
     : SETTINGS_DEFAULTS.endpoint
   const model = typeof src.model === 'string' && src.model.trim() !== '' ? src.model.trim() : SETTINGS_DEFAULTS.model
-  const stateBudget = src.stateBudget === 'trimmed' ? 'trimmed' : 'full'
+  const stateBudget = normalizeChoice(src.stateBudget, 'stateBudget', ['full', 'trimmed'], mode)
   const timeoutMs = normalizeTimeout(src.timeoutMs, strict, problems)
-  const denialRoute = src.denialRoute === 'final' ? 'final' : 'ask'
+  const denialRoute = normalizeChoice(src.denialRoute, 'denialRoute', ['ask', 'final'], mode)
   return {
     engine,
     endpoint,

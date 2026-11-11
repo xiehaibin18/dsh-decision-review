@@ -9,6 +9,7 @@ silenceConsole()
 
 const BASE = 'http://127.0.0.1:3080/api/decision-review'
 const SECRET = 'sk-stored-secret'
+const INVALID_CHOICES = { engine: 'sessoin', stateBudget: 'trimmmed', denialRoute: 'fianl' }
 
 describe('lenient normalization reports what it replaced', () => {
   it('falls back to the default threshold and lists the problem', () => {
@@ -114,6 +115,31 @@ describe('invalid stored settings', () => {
     assert.equal(payload.settings.tConf, 0.8)
     assert.equal(payload.settings.tAuth, 0.5)
     assert.equal(payload.settings.timeoutMs, 20000)
+  })
+
+  it('keeps review stopped when a stored choice is unrecognized', async () => {
+    const calls = stubDecisionsFetch(async () => makeAnswers({ risk: 'high' }))
+    for (const [field, invalid] of Object.entries(INVALID_CHOICES)) {
+      start({ apiKey: SECRET, [field]: invalid })
+      const payload = await configuration()
+      assert.equal(payload.runtime.paused, true, field)
+      assert.match(payload.problems.join(' '), new RegExp(field))
+      assert.equal((await review()).kind, 'deny', field)
+    }
+    assert.equal(calls.length, 0)
+  })
+
+  it('rejects unrecognized choices without replacing the saved review policy', async () => {
+    const policy = { engine: 'session', stateBudget: 'trimmed', denialRoute: 'final' }
+    start(policy)
+    for (const [field, invalid] of [...Object.entries(INVALID_CHOICES), ['engine', null]]) {
+      const response = await route('save').fetch(jsonRequest(`${BASE}/save`, { settings: { [field]: invalid } }))
+      assert.equal(response.status, 400, field)
+      assert.match((await response.json()).error, new RegExp(field))
+    }
+    const payload = await configuration()
+    for (const [field, value] of Object.entries(policy)) assert.equal(payload.settings[field], value)
+    assert.deepEqual(stored(), policy)
   })
 
   it('never quotes the stored file in a JSON parse problem', async () => {
