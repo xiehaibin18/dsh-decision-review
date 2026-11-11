@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "ES2024",
+      "DOM"
+    ],
+    "preserveSymlinks": true
+  },
+  "include": [
+    "scripts/**/*.ts"
+  ]
+}

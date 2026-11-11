@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { validateAnswers } from '../index.js'
+import { validateAnswers } from '../dist/index.js'
 import { makeAnswers } from './helpers.js'
 
 const RULES = [{ condition: 'deploys to production', verdict: 'ask' }]

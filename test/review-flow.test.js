@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, it, mock } from 'node:test'
-import { apply, createReviewTrail } from '../index.js'
+import { apply, createReviewTrail } from '../dist/index.js'
 import { makeAnswers, makeExec, makeHost, makeProfileDir, makeSession, removeDir, silenceConsole, stubDecisionsFetch } from './helpers.js'
 
 silenceConsole()

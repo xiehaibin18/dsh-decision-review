@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { composeDecision, humanWhy, toComposeInput } from '../index.js'
+import { composeDecision, humanWhy, toComposeInput } from '../dist/index.js'
 import { makeAnswers, silenceConsole } from './helpers.js'
 
 silenceConsole()
@@ -47,6 +47,13 @@ describe('a matched deny rule', () => {
     assert.equal(compose({ risk: 'high', rule: matched }, [{ condition: 'x', verdict: 'ask' }]).hardDeny, undefined)
     assert.equal(compose({ risk: 'high', rule: { choice: 'none' } }, DENY_RULES).hardDeny, undefined)
   })
+})
+
+it('does not apply an allow rule when numeric-string confidence is below the threshold', () => {
+  const rules = [{ condition: 'deploys to production', verdict: 'allow' }]
+  const decision = compose({ risk: 'medium', rule: { choice: 'r0', confidence: '0.1' } }, rules)
+  assert.equal(decision.decision, 'deny')
+  assert.equal(decision.why.code, 'authorization')
 })
 
 describe('allow_if_requested', () => {
@@ -111,6 +118,7 @@ describe('refused predicates', () => {
 describe('humanWhy', () => {
   it('falls back to a generic line for a missing or unknown reason', () => {
     assert.match(humanWhy(undefined, 'en'), /did not approve/)
+    assert.match(humanWhy(null, 'en'), /did not approve/)
     assert.match(humanWhy({ code: 'nonexistent' }, 'zh'), /未通过/)
   })
 

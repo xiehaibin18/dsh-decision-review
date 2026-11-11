@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { normalizeSettings } from '../index.js'
+import { normalizeSettings } from '../dist/index.js'
 import { silenceConsole } from './helpers.js'
 
 silenceConsole()

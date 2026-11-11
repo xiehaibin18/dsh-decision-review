@@ -202,7 +202,7 @@ describe('configuration panel', () => {
       if (url.endsWith('/test')) return reply({ ok: true, results: serverResults })
       return reply({ error: 'unknown' }, 404)
     })
-    await import(`../client.js?run=${Math.random()}`)
+    await import(`../dist/client.js?run=${Math.random()}`)
     if (!deferMount) {
       mount()
       await settle()

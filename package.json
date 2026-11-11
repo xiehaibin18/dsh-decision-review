@@ -5,21 +5,99 @@
   "type": "module",
   "description": "Per-tool-call Auto review with a pluggable engine: OpenAI Decisions API (typed predicates + deterministic composition) or the official session-model mirror review.",
   "scripts": {
-    "test": "node --test \"test/*.test.js\""
+    "build": "bun run toolchain:check && bun scripts/build.ts",
+    "typecheck": "bun run toolchain:check && bun check --no-script -p tsconfig.server.json && bun check --no-script -p tsconfig.client.json && bun check --no-script -p tsconfig.scripts.json",
+    "lint": "bun run toolchain:check && bun lint --no-script --max-warnings=0 src scripts test",
+    "fmt": "bun run toolchain:check && bun fmt --no-script --no-editorconfig src scripts test assets package.json tsconfig*.json bunfig.toml",
+    "fmt:check": "bun run toolchain:check && bun fmt --no-script --check --no-editorconfig src scripts test assets package.json tsconfig*.json bunfig.toml",
+    "test": "bun run build && node --test \"test/*.test.js\"",
+    "check": "bun run typecheck && bun run lint && bun run fmt:check && bun run test",
+    "prepack": "bun run build",
+    "pack": "bun pm pack --ignore-scripts --destination artifacts",
+    "toolchain:check": "bun scripts/check-toolchain.ts",
+    "verify:package": "bun run toolchain:check && bun scripts/verify-package.ts",
+    "verify:host": "python3 scripts/verify-host.py"
   },
   "exports": {
-    ".": "./index.js",
-    "./client": "./client.js",
-    "./locale/*.json": "./locale/*.json",
-    "./icon": "./icon.svg"
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./locale/*.json": "./dist/locale/*.json",
+    "./icon": "./dist/icon.svg"
   },
-  "files": ["index.js", "client.js", "cordis.patch.yml", "locale/en.json", "locale/zh.json", "icon.svg", "LICENSE.upstream"],
+  "files": [
+    "dist/",
+    "LICENSE.upstream"
+  ],
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./dist/cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "immediately": true,
-      "inject": ["@deepseek-ai/dsh-client-ui-conversation"]
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
     }
+  },
+  "packageManager": "bun@1.4.3-canary.20261021.1",
+  "engines": {
+    "node": ">=24.9.0",
+    "bun": "1.4.4-canary.1",
+    "dsh": "0.2.2-rc.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/dsh-agent": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-agent-instructions": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-api-job-controller": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-api-remote-access": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-api-remotes": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-api-terminal-controller": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-api-workspace-controller": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-api-workspace-files": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-app-boot": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-connection": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-file-upload": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-locale": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-store": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-layout": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-session": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-compaction": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-cordis-host-runner": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-host-plugin-inventory": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-jobs": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm-retry": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-permission-presets": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-plugin-manager": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-plugin-market": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session-reference": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-subagent": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tool-executor-ptc": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tool-todo": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-user-approval": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-util-code-language": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-util-file-drag": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-working-directory": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-workspace": "0.2.2-rc.1",
+    "@shikijs/langs": "4.4.3",
+    "@types/js-yaml": "4.0.9",
+    "@types/mdast": "4.0.4",
+    "@types/node": "24.19.2",
+    "@types/react": "18.3.31",
+    "jsdom": "29.1.1",
+    "lexical": "0.49.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   }
 }

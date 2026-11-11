@@ -21,3 +21,7 @@ decision-review.log.jsonl*
 .vscode/
 *.swp
 coverage/
+
+# Generated build and package outputs
+dist/
+artifacts/

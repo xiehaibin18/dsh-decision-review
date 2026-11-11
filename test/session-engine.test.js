@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, it, mock } from 'node:test'
-import { apply, readDecision } from '../index.js'
+import { apply, readDecision } from '../dist/index.js'
 import { makeAnswers, makeExec, makeHost, makeProfileDir, makeSession, removeDir, silenceConsole, streamOf, stubDecisionsFetch } from './helpers.js'
 
 silenceConsole()

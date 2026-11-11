@@ -85,10 +85,22 @@ The plugin supplies localized presentation metadata as the optional second argum
 
 An unpatched rc.1 host ignores the extra argument and still displays its built-in same-model confirmation; updating the plugin alone cannot correct that host-owned dialog. Host support is outside this plugin delivery, so the metadata must not be treated as a correction to the confirmation text in an unpatched installation.
 
-## Testing
+## Development and packaging
+
+The plugin now builds from strict TypeScript with separate server, React client, and shared API contracts. Install the packed artifact, not the source directory. The package contains Node ESM, a DSH ModuleLoader client, locales, icon and bundle patch under `dist/`; it has no runtime npm dependencies. Supported host: DSH `0.2.2-rc.1`, Node `>=24.9.0`.
+
+Development is pinned to Bun `1.4.4-canary.1+963452075` for native formatting, type checking and lint. Its immutable npm distribution is `bun@1.4.3-canary.20261021.1`; the version labels differ, so scripts check the full binary revision. See the [development guide](https://github.com/xiehaibin18/dsh-decision-review/blob/main/docs/development.md) for isolated toolchain setup, source/output boundaries, commands, and local installation.
 
 ```sh
-npm test   # node --test "test/*.test.js"; no dependencies (run on Node 24)
+bun install --frozen-lockfile
+bun run check
+bun run pack
+bun run verify:package
+bun run verify:host artifacts/local-decision-review-0.1.0.tgz
 ```
 
-The suite covers the compose rules (including the hard refusal), Decisions response validation, settings normalization and the paused-review behaviour for invalid stored settings, the session engine against the host stream protocol, the Connection routes, the approval flow with the review trail, a host-integration double for `apply()`, and the Web UI panel through a fake renderer. It uses doubles for the host, so it does not replace a live check of an installed host. The browser acceptance used real React, the actual config/save/test handlers, a temporary synthetic profile, and a local simulated Decisions service; it did not load a user profile or call an external model. Tests use synthetic fixtures only. Offline policy and projection checks verify the inputs and deterministic routing; they do not establish a model misjudgment rate or prove real-model authorization behavior.
+`verify:package` builds from two clean source copies, compares tarball bytes, installs offline with an empty package cache and no development dependencies, then checks Node exports and reruns the original regressions against installed artifacts. The package is self-contained; Bun is a development tool, not a requirement of the installed plugin.
+
+## Testing
+
+The suite covers the compose rules (including the hard refusal), Decisions response validation, settings normalization and the paused-review behaviour for invalid stored settings, the session engine against the host stream protocol, the Connection routes, the approval flow with the review trail, a host-integration double for `apply()`, and the Web UI panel through a fake renderer. It uses doubles for the host, so it does not replace a live check of an installed host. The additional DOM test executes the built classic script with real React, the actual config/save/test handlers, a temporary synthetic profile, and simulated Decisions responses. The separate installed-host verifier uses the real DSH loader and authenticated HTTP stack, including its resolved locale/icon metadata and client artifact URL. It does not mount the actual DSH browser UI. Neither test uses a real user profile or an external model. See the [host verification scope](https://github.com/xiehaibin18/dsh-decision-review/blob/main/docs/host-verification.md). Tests use synthetic fixtures only. Offline policy and projection checks verify the inputs and deterministic routing; they do not establish a model misjudgment rate or prove real-model authorization behavior.
