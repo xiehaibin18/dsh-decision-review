@@ -1,0 +1,31 @@
+name: Pinned Bun toolchain
+description: Install the approved canary, verify its revision, and freeze project dependencies.
+inputs:
+  node-version:
+    description: Exact production Node version
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: ${{ inputs.node-version }}
+    - name: Install the exact Bun distribution
+      shell: bash
+      run: |
+        npm install --prefix "$RUNNER_TEMP/decision-review-toolchain" --no-save --no-audit --no-fund --registry=https://registry.npmjs.org bun@1.4.3-canary.20261021.1
+        echo "$RUNNER_TEMP/decision-review-toolchain/node_modules/.bin" >> "$GITHUB_PATH"
+        echo "BUN_INSTALL_CACHE_DIR=$RUNNER_TEMP/decision-review-bun-cache" >> "$GITHUB_ENV"
+    - name: Verify the binary revision
+      shell: bash
+      run: |
+        node --version
+        bun --revision
+        bun --no-env-file run toolchain:check
+    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ runner.temp }}/decision-review-bun-cache
+        key: bun-${{ runner.os }}-${{ runner.arch }}-963452075-${{ hashFiles('bun.lock') }}
+    - name: Install locked dependencies
+      shell: bash
+      run: bun --no-env-file install --frozen-lockfile --ignore-scripts

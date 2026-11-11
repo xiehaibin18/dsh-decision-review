@@ -1,98 +1,80 @@
-import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { describe, expect, test } from 'bun:test'
 import { validateAnswers } from '../dist/index.js'
-import { makeAnswers } from './helpers.js'
+import { makeAnswers } from './fixtures.js'
 
 const RULES = [{ condition: 'deploys to production', verdict: 'ask' }]
 
-function check(mutate, rules = []) {
-  const answers = makeAnswers({ rule: rules.length > 0 ? { choice: 'none' } : undefined })
-  return () => validateAnswers({ answers: mutate(answers) }, rules)
-}
-
 describe('validateAnswers', () => {
-  it('accepts a complete answer list and refusals', () => {
-    assert.equal(check((answers) => answers)().length, 7)
-    assert.doesNotThrow(
-      check((answers) => answers.map((a) => (a.name === 'exfiltration' ? { name: a.name, type: 'refusal' } : a))),
-    )
+  test.each([
+    ['complete answers', {}],
+    ['a refused predicate', { exfiltration: { type: 'refusal' } }],
+  ])('accepts %s', (_scenario, overrides) => {
+    const answers = makeAnswers({ overrides })
+    const validated = validateAnswers({ answers }, [])
+    expect(validated).toHaveLength(7)
+    expect(validated).toStrictEqual(answers)
   })
 
-  it('rejects a response without an answers list', () => {
-    assert.throws(() => validateAnswers({}, []), /no answers list/)
-    assert.throws(() => validateAnswers(null, []), /no answers list/)
+  test.each([
+    ['an empty object', {}],
+    ['null', null],
+  ])('rejects %s without an answers list', (_scenario, payload) => {
+    expect(() => validateAnswers(payload, [])).toThrow(/no answers list/)
   })
 
-  it('rejects a missing predicate answer', () => {
-    assert.throws(
-      check((answers) => answers.filter((a) => a.name !== 'explicit_authorization')),
-      /no answer for explicit_authorization/,
-    )
+  test.each([['explicit_authorization'], ['risk_class']])('requires the %s answer', (name) => {
+    const answers = makeAnswers().filter((answer) => answer.name !== name)
+    expect(() => validateAnswers({ answers }, [])).toThrow(`no answer for ${name}`)
   })
 
-  it('rejects a missing risk_class answer', () => {
-    assert.throws(
-      check((answers) => answers.filter((a) => a.name !== 'risk_class')),
-      /no answer for risk_class/,
-    )
-  })
-
-  it('rejects a mistyped answer', () => {
-    assert.throws(
-      check((answers) =>
-        answers.map((a) =>
-          a.name === 'exfiltration' ? { name: a.name, type: 'choice', choice: 'low', confidence: 1 } : a,
-        ),
-      ),
+  test.each([
+    [
+      'a choice for a predicate',
+      'exfiltration',
+      { type: 'choice', choice: 'low', confidence: 1 },
       /expected a predicate answer/,
-    )
-    assert.throws(
-      check((answers) =>
-        answers.map((a) => (a.name === 'risk_class' ? { name: a.name, type: 'predicate', probability: 0 } : a)),
-      ),
-      /expected a choice answer/,
-    )
-  })
-
-  it('rejects an unknown risk class', () => {
-    assert.throws(
-      check((answers) => answers.map((a) => (a.name === 'risk_class' ? { ...a, choice: 'catastrophic' } : a))),
+    ],
+    ['a predicate for a choice', 'risk_class', { type: 'predicate', probability: 0 }, /expected a choice answer/],
+    [
+      'an unknown risk class',
+      'risk_class',
+      { type: 'choice', choice: 'catastrophic', confidence: 1 },
       /unknown choice/,
-    )
-  })
-
-  it('rejects out-of-range or missing numbers', () => {
-    assert.throws(
-      check((answers) => answers.map((a) => (a.name === 'exfiltration' ? { ...a, probability: 1.5 } : a))),
+    ],
+    [
+      'an out-of-range probability',
+      'exfiltration',
+      { type: 'predicate', probability: 1.5 },
       /probability must be a number/,
-    )
-    assert.throws(
-      check((answers) => answers.map((a) => (a.name === 'exfiltration' ? { ...a, probability: '0.1' } : a))),
+    ],
+    [
+      'a numeric-string probability',
+      'exfiltration',
+      { type: 'predicate', probability: '0.1' },
       /probability must be a number/,
-    )
-    assert.throws(
-      check((answers) =>
-        answers.map((a) => (a.name === 'risk_class' ? { name: a.name, type: 'choice', choice: 'low' } : a)),
-      ),
-      /confidence must be a number/,
-    )
+    ],
+    ['a missing confidence', 'risk_class', { type: 'choice', choice: 'low' }, /confidence must be a number/],
+  ])('rejects %s', (_scenario, name, answer, problem) => {
+    const answers = makeAnswers({ overrides: { [name]: answer } })
+    expect(() => validateAnswers({ answers }, [])).toThrow(problem)
   })
 
-  it('rejects a duplicated answer', () => {
-    assert.throws(
-      check((answers) => [...answers, answers[1]]),
-      /twice/,
-    )
+  test('rejects a duplicated answer', () => {
+    const answers = makeAnswers()
+    expect(() => validateAnswers({ answers: [...answers, answers[1]] }, [])).toThrow(/twice/)
   })
 
-  it('requires the operator_rule answer only when rules exist, and checks its choice', () => {
-    assert.throws(() => validateAnswers({ answers: makeAnswers() }, RULES), /no answer for operator_rule/)
-    assert.throws(
-      check((answers) => answers.map((a) => (a.name === 'operator_rule' ? { ...a, choice: 'r7' } : a)), RULES),
-      /unknown choice/,
-    )
-    assert.doesNotThrow(
-      check((answers) => answers.map((a) => (a.name === 'operator_rule' ? { ...a, choice: 'r0' } : a)), RULES),
-    )
+  test('requires operator_rule when rules are configured', () => {
+    expect(() => validateAnswers({ answers: makeAnswers() }, RULES)).toThrow(/no answer for operator_rule/)
+  })
+
+  test('rejects an operator_rule choice for an unconfigured rule', () => {
+    const answers = makeAnswers({ rule: { choice: 'r7' } })
+    expect(() => validateAnswers({ answers }, RULES)).toThrow(/unknown choice/)
+  })
+
+  test('accepts an operator_rule choice for a configured rule', () => {
+    const answers = makeAnswers({ rule: { choice: 'r0' } })
+    expect(validateAnswers({ answers }, RULES)).toStrictEqual(answers)
   })
 })

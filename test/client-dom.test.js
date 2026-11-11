@@ -1,200 +1,271 @@
-import assert from 'node:assert/strict'
-import { readFile, writeFile } from 'node:fs/promises'
+import { afterEach, describe, expect, jest, mock, spyOn, test } from 'bun:test'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { test } from 'node:test'
-import { JSDOM } from 'jsdom'
-import React, { act } from 'react'
+import { act } from 'react'
 import { apply } from '../dist/index.js'
+import { CLIENT_ORIGIN, CONFIG_SLOT, STATS_SLOT, createClient } from './client-harness.js'
 import { makeAnswers, makeHost, makeProfileDir, removeDir } from './helpers.js'
 
-test('the built classic script mounts and saves settings with real React DOM in a simulated DSH host', async (t) => {
-  const origin = 'https://dsh.example.test'
-  const endpoint = 'https://decisions.example.test/v1/decisions'
-  const storedKey = 'test-only-stored-key'
-  const condition = '\n  Deploy service A | service B.\n  仅限生产环境｜保留末尾空格。  \n'
-  const rules = [{ condition, verdict: 'deny' }]
-  const profileDir = makeProfileDir()
-  const { window } = new JSDOM('<div id="root"></div>', { runScripts: 'outside-only', url: origin })
-  const container = window.document.getElementById('root')
+describe('built client in a simulated DSH host', () => {
+  let client
   let host
-  let root
-  let disposeLocale
+  let profileDir
+  let decisionsFetch
+  let info
 
-  t.after(async () => {
+  afterEach(async () => {
     try {
-      if (root) await act(async () => root.unmount())
-      disposeLocale?.()
-      await host?.dispose()
+      await client?.dispose()
     } finally {
-      window.close()
-      delete globalThis.window
-      delete globalThis.document
-      delete globalThis.IS_REACT_ACT_ENVIRONMENT
-      removeDir(profileDir)
+      try {
+        await host?.dispose()
+      } finally {
+        decisionsFetch?.mockRestore()
+        info?.mockRestore()
+        if (profileDir) removeDir(profileDir)
+      }
     }
   })
-  // React DOM detects the DOM at module initialization for its input event handlers.
-  Object.assign(globalThis, { window, document: window.document, IS_REACT_ACT_ENVIRONMENT: true })
-  const { createRoot } = await import('react-dom/client')
 
-  function startHost() {
-    host = makeHost({ profileContext: { name: 'test', dir: profileDir } })
-    apply(host.ctx)
-  }
+  test.serial('saves and reloads settings through the real host routes', async () => {
+    const endpoint = 'https://decisions.example.test/v1/decisions'
+    const storedKey = 'test-only-stored-key'
+    const condition = '\n  Deploy service A | service B.\n  仅限生产环境｜保留末尾空格。  \n'
+    const rules = [{ condition, verdict: 'deny' }]
+    profileDir = makeProfileDir()
 
-  t.mock.method(console, 'info', () => {})
-  const decisionsCalls = []
-  t.mock.method(globalThis, 'fetch', async (url, init) => {
-    assert.equal(url, endpoint)
-    const body = JSON.parse(init.body)
-    decisionsCalls.push({ authorization: new Headers(init.headers).get('authorization'), body })
-    const exfiltration = JSON.stringify(body.input).includes('hooks.example-collector.net')
-    const answers = makeAnswers({
-      rule: { choice: 'none' },
-      overrides: exfiltration ? { exfiltration: { type: 'predicate', probability: 0.98 } } : {},
+    function startHost() {
+      host = makeHost({ profileContext: { name: 'test', dir: profileDir } })
+      apply(host.ctx)
+    }
+
+    info = spyOn(console, 'info').mockImplementation(() => {})
+    const decisionsCalls = []
+    decisionsFetch = spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      expect(url).toBe(endpoint)
+      const body = JSON.parse(init.body)
+      decisionsCalls.push({ authorization: new Headers(init.headers).get('authorization'), body })
+      const exfiltration = JSON.stringify(body.input).includes('hooks.example-collector.net')
+      const answers = makeAnswers({
+        rule: { choice: 'none' },
+        overrides: exfiltration ? { exfiltration: { type: 'predicate', probability: 0.98 } } : {},
+      })
+      return Response.json({ answers })
     })
-    return Response.json({ answers })
+    await writeFile(join(profileDir, 'decision-review.settings.json'), JSON.stringify({ endpoint, apiKey: storedKey }))
+    startHost()
+
+    const requests = []
+    client = createClient(async (path, init) => {
+      expect(path).toMatch(/^\/api\/decision-review\//)
+      const url = new URL(path, CLIENT_ORIGIN)
+      const request = new Request(url, init)
+      const route = host.routes.get(url.pathname)
+      expect(route?.methods, `Unregistered route: ${request.method} ${path}`).toContain(request.method)
+      const response = await route.fetch(request)
+      const sent = init?.body === undefined ? undefined : JSON.parse(init.body)
+      requests.push({ path, sent, received: await response.clone().json() })
+      return response
+    })
+    client.load()
+    const { container } = client
+
+    function button(label) {
+      const control = client.button(label)
+      expect(control, `Missing button: ${label}`).toBeDefined()
+      return control
+    }
+
+    const click = (label) => act(async () => button(label).click())
+    const password = () => container.querySelector('input[type=password]')
+    const rule = () => container.querySelector('textarea')
+    const verdict = () => rule().closest('section').querySelector('select')
+
+    await client.render(CONFIG_SLOT, { view: 'page' })
+    expect(container.textContent).toMatch(/Authorization review/)
+    expect(password().value).toBe('')
+    expect(password().placeholder).toMatch(/saved/)
+    expect(button('Run smoke test (3 scenarios)').disabled).toBe(false)
+
+    await click('Add rule')
+    await client.change(rule(), condition)
+    await client.change(verdict(), 'deny')
+    expect(button('Run smoke test (3 scenarios)').disabled).toBe(true)
+    await click('Run smoke test (3 scenarios)')
+    expect(requests).toHaveLength(1)
+    await click('Save')
+    expect(container.textContent).toContain('Settings saved.')
+    expect(button('Run smoke test (3 scenarios)').disabled).toBe(false)
+    expect(requests[1].sent.settings.rules).toEqual(rules)
+    expect(requests[1].sent.settings).not.toHaveProperty('apiKey')
+
+    // Restart the server and remount the panel to read the on-disk settings.
+    await client.unmount()
+    await host.dispose()
+    startHost()
+    client.language = 'zh'
+    await client.render(CONFIG_SLOT, { view: 'page' })
+    expect(container.textContent).toMatch(/授权评审/)
+    expect(rule().value).toBe(condition)
+    expect(verdict().value).toBe('deny')
+    expect(password().value).toBe('')
+    expect(password().placeholder).toMatch(/已保存/)
+
+    await click('移除已保存的密钥')
+    expect(button('运行冒烟测试（3 个场景）').disabled).toBe(true)
+    await click('保存')
+    expect(requests[3].sent.settings.clearApiKey).toBe(true)
+    expect(password().placeholder).toBe('')
+    expect(button('运行冒烟测试（3 个场景）').disabled).toBe(false)
+    await click('运行冒烟测试（3 个场景）')
+
+    const rows = [...container.querySelectorAll('tbody tr')].map((row) => row.textContent)
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toMatch(/运行项目测试.*放行.*低风险/)
+    expect(rows[1]).toMatch(/向外部地址发送凭据.*拒绝.*高风险.*疑似数据外传/)
+    expect(rows[2]).toMatch(/安装插件.*放行.*低风险/)
+    expect(decisionsCalls).toHaveLength(3)
+    for (const { authorization, body } of decisionsCalls) {
+      expect(authorization ?? '').not.toContain(storedKey)
+      const operatorRule = body.questions.find(({ name }) => name === 'operator_rule')
+      expect(operatorRule.choices.some(({ description }) => description.endsWith(condition))).toBe(true)
+    }
+
+    expect(requests.map(({ path }) => path.split('/').at(-1))).toEqual(['config', 'save', 'config', 'save', 'test'])
+    expect(requests.slice(0, 4).map(({ received }) => received.settings.hasApiKey)).toEqual([true, true, true, false])
+    for (const { received } of requests) {
+      expect(received.settings ?? {}).not.toHaveProperty('apiKey')
+      expect(JSON.stringify(received)).not.toContain(storedKey)
+    }
+
+    const { unregisterLocale } = client
+    await client.dispose()
+    client = undefined
+    expect(unregisterLocale).toHaveBeenCalledTimes(1)
   })
-  await writeFile(join(profileDir, 'decision-review.settings.json'), JSON.stringify({ endpoint, apiKey: storedKey }))
-  startHost()
+})
 
-  const requests = []
-  window.fetch = async (path, init) => {
-    assert.match(path, /^\/api\/decision-review\//)
-    const url = new URL(path, origin)
-    const request = new Request(url, init)
-    const route = host.routes.get(url.pathname)
-    assert.ok(route?.methods.includes(request.method), `${request.method} ${path} is not registered`)
-    const response = await route.fetch(request)
-    const text = await response.text()
-    const sent = init?.body === undefined ? undefined : JSON.parse(init.body)
-    requests.push({ path, sent, received: JSON.parse(text) })
-    return new Response(text, { status: response.status, headers: response.headers })
-  }
+describe('composer approval stats pill', () => {
+  let client
+  let fetchStats
+  let hidden
 
-  let messages
-  let configView
-  let language = 'en'
-  window.__ModuleLoader__ = {
-    load({ id, factory }) {
-      assert.equal(id, '@local/decision-review')
-      const client = factory((name) => {
-        assert.equal(name, 'react')
-        return React
-      })
-      assert.deepEqual([...client.inject], ['slots', 'locale'])
-      disposeLocale = client.apply({
-        locale: {
-          register(namespace, dictionaries) {
-            assert.equal(namespace, 'decision-review')
-            messages = dictionaries
-            return () => {}
-          },
-          resolveText: (text) => (typeof text === 'string' ? text : (text[language] ?? text.en)),
-        },
-        slots: {
-          inject: (_slot, setup) => setup(),
-          register(meta, component) {
-            if (meta.name === 'plugins.row.config') configView = component
-          },
-        },
-      })
-    },
-  }
-  window.eval(await readFile(new URL('../dist/client.js', import.meta.url), 'utf8'))
-  assert.equal(typeof configView, 'function')
-
-  async function mount() {
-    const translate = (key, params = {}) =>
-      messages[language][key].replace(/\{(\w+)\}/g, (_, name) => String(params[name]))
-    root = createRoot(container)
-    await act(async () => root.render(React.createElement(configView, { view: 'page', t: translate })))
-  }
-
-  function button(label) {
-    const match = [...container.querySelectorAll('button')].find(
-      (node) => node.textContent.replace(/^\+ /, '') === label,
-    )
-    assert.ok(match, `Missing button: ${label}`)
-    return match
-  }
-
-  async function change(control, value) {
-    // Call the native setter so React's value tracker observes the DOM event.
-    const { set } = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), 'value')
-    const event = control.tagName === 'SELECT' ? 'change' : 'input'
-    await act(async () => {
-      set.call(control, value)
-      control.dispatchEvent(new window.Event(event, { bubbles: true }))
+  function statsResponse(overrides = {}) {
+    return Response.json({
+      reviewed: 0,
+      autoAllowed: 0,
+      asked: 0,
+      finalDenied: 0,
+      failed: 0,
+      approvals: { asked: 0, allowed: 0, rejected: 0, cancelled: 0, unavailable: 0 },
+      passRate: null,
+      ...overrides,
     })
   }
 
-  const click = async (label) => act(async () => button(label).click())
-  const password = () => container.querySelector('input[type=password]')
-  const rule = () => container.querySelector('textarea')
-  const verdict = () => rule().closest('section').querySelector('select')
-
-  await mount()
-  assert.match(container.textContent, /Authorization review/)
-  assert.equal(password().value, '')
-  assert.match(password().placeholder, /saved/)
-  assert.equal(button('Run smoke test (3 scenarios)').disabled, false)
-
-  await click('Add rule')
-  await change(rule(), condition)
-  await change(verdict(), 'deny')
-  assert.equal(button('Run smoke test (3 scenarios)').disabled, true)
-  await click('Run smoke test (3 scenarios)')
-  assert.equal(requests.length, 1)
-  await click('Save')
-  assert.match(container.textContent, /Settings saved\./)
-  assert.equal(button('Run smoke test (3 scenarios)').disabled, false)
-  assert.deepEqual(requests[1].sent.settings.rules, rules)
-  assert.equal(Object.hasOwn(requests[1].sent.settings, 'apiKey'), false)
-
-  // Restart the server and remount the panel to read the on-disk settings.
-  await act(async () => root.unmount())
-  root = undefined
-  await host.dispose()
-  startHost()
-  language = 'zh'
-  await mount()
-  assert.match(container.textContent, /授权评审/)
-  assert.equal(rule().value, condition)
-  assert.equal(verdict().value, 'deny')
-  assert.equal(password().value, '')
-  assert.match(password().placeholder, /已保存/)
-
-  await click('移除已保存的密钥')
-  assert.equal(button('运行冒烟测试（3 个场景）').disabled, true)
-  await click('保存')
-  assert.equal(requests[3].sent.settings.clearApiKey, true)
-  assert.equal(password().placeholder, '')
-  assert.equal(button('运行冒烟测试（3 个场景）').disabled, false)
-  await click('运行冒烟测试（3 个场景）')
-
-  const rows = [...container.querySelectorAll('tbody tr')].map((row) => row.textContent)
-  assert.equal(rows.length, 3)
-  assert.match(rows[0], /运行项目测试.*放行.*低风险/)
-  assert.match(rows[1], /向外部地址发送凭据.*拒绝.*高风险.*疑似数据外传/)
-  assert.match(rows[2], /安装插件.*放行.*低风险/)
-  assert.equal(decisionsCalls.length, 3)
-  for (const { authorization, body } of decisionsCalls) {
-    assert.ok(!authorization?.includes(storedKey))
-    const operatorRule = body.questions.find(({ name }) => name === 'operator_rule')
-    assert.ok(operatorRule.choices.some(({ description }) => description.endsWith(condition)))
+  async function advance(ms) {
+    await act(async () => {
+      jest.advanceTimersByTime(ms)
+    })
   }
 
-  assert.deepEqual(
-    requests.map(({ path }) => path.split('/').at(-1)),
-    ['config', 'save', 'config', 'save', 'test'],
-  )
-  assert.deepEqual(
-    requests.slice(0, 4).map(({ received }) => received.settings.hasApiKey),
-    [true, true, true, false],
-  )
-  for (const { received } of requests) {
-    assert.ok(!Object.hasOwn(received.settings ?? {}, 'apiKey'))
-    assert.ok(!JSON.stringify(received).includes(storedKey))
+  async function render(sessionId) {
+    await client.render(STATS_SLOT, { sessionId })
   }
+
+  function openClient() {
+    jest.useFakeTimers()
+    hidden = false
+    fetchStats = mock(async (url) => {
+      throw new Error(`Unexpected stats request: ${url}`)
+    })
+    client = createClient(fetchStats)
+    Object.defineProperty(client.window.document, 'hidden', { get: () => hidden })
+    client.load()
+  }
+
+  afterEach(async () => {
+    try {
+      await client?.dispose()
+    } finally {
+      client = undefined
+      jest.useRealTimers()
+    }
+  })
+
+  test.serial('polls the normalized session on schedule, skips hidden pages, and stops on unmount', async () => {
+    openClient()
+    fetchStats
+      .mockResolvedValueOnce(statsResponse())
+      .mockResolvedValueOnce(
+        statsResponse({ reviewed: 6, autoAllowed: 3, asked: 1, finalDenied: 1, failed: 1, passRate: 50 }),
+      )
+      .mockResolvedValueOnce(statsResponse({ reviewed: 8, autoAllowed: 6, asked: 2, passRate: 75 }))
+
+    await render('session-test/with space')
+    expect(fetchStats.mock.calls).toEqual([['/api/decision-review/stats?session=test%2Fwith%20space']])
+    expect(client.container.textContent).toBe('')
+
+    await advance(3999)
+    expect(fetchStats).toHaveBeenCalledTimes(1)
+    await advance(1)
+    expect(fetchStats).toHaveBeenCalledTimes(2)
+    expect(client.container.textContent).toBe('6 reviewed · 50% auto-passed')
+    expect(client.container.querySelector('[title]').title).toBe(
+      'Auto review this session: 6 calls · 3 auto-passed · 1 asked · 2 denied',
+    )
+
+    hidden = true
+    await advance(8000)
+    expect(fetchStats).toHaveBeenCalledTimes(2)
+    expect(client.container.textContent).toBe('6 reviewed · 50% auto-passed')
+    hidden = false
+    await advance(4000)
+    expect(fetchStats).toHaveBeenCalledTimes(3)
+    expect(client.container.textContent).toBe('8 reviewed · 75% auto-passed')
+
+    await client.unmount()
+    await advance(8000)
+    expect(fetchStats).toHaveBeenCalledTimes(3)
+    expect(client.container.textContent).toBe('')
+  })
+
+  test.serial('ignores an obsolete session reply and stops polling with a reply pending at unmount', async () => {
+    openClient()
+    const previous = Promise.withResolvers()
+    const pending = Promise.withResolvers()
+    const obsoleteStats = statsResponse({ reviewed: 99, autoAllowed: 99, passRate: 100 })
+    const pendingStats = statsResponse({ reviewed: 9, autoAllowed: 9, passRate: 100 })
+    fetchStats
+      .mockReturnValueOnce(previous.promise)
+      .mockResolvedValueOnce(statsResponse({ reviewed: 2, autoAllowed: 1, asked: 1, passRate: 50 }))
+      .mockReturnValueOnce(pending.promise)
+
+    try {
+      await render('session-old')
+      await render('session-current')
+      expect(fetchStats.mock.calls).toEqual([
+        ['/api/decision-review/stats?session=old'],
+        ['/api/decision-review/stats?session=current'],
+      ])
+      expect(client.container.textContent).toBe('2 reviewed · 50% auto-passed')
+
+      await act(async () => previous.resolve(obsoleteStats))
+      expect(client.container.textContent).toBe('2 reviewed · 50% auto-passed')
+
+      await advance(4000)
+      expect(fetchStats).toHaveBeenCalledTimes(3)
+      expect(fetchStats).toHaveBeenLastCalledWith('/api/decision-review/stats?session=current')
+      await client.unmount()
+      await act(async () => pending.resolve(pendingStats))
+      await advance(8000)
+      expect(fetchStats).toHaveBeenCalledTimes(3)
+      expect(client.container.textContent).toBe('')
+    } finally {
+      await act(async () => {
+        previous.resolve(obsoleteStats)
+        pending.resolve(pendingStats)
+      })
+    }
+  })
 })

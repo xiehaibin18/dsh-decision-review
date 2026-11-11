@@ -17,7 +17,7 @@ bun run toolchain:check
 bun install --frozen-lockfile
 ```
 
-这里的 npm 仅用于安装固定工具链。项目依赖使用 Bun 与提交的 `bun.lock` 管理；不要使用会漂移的 `bun upgrade --canary`。已核验 macOS arm64 分发包的官方完整性信息，并确认它与本机二进制逐字节一致；其他平台尚未实测。[固定分发版本](https://www.npmjs.com/package/bun/v/1.4.3-canary.20261021.1) · [Bun 原生 lint](https://bun.com/docs/lint)
+这里的 npm 仅用于安装固定工具链。项目依赖使用 Bun 与提交的 `bun.lock` 管理；不要使用会漂移的 `bun upgrade --canary`。已核验 macOS arm64 分发包的官方完整性信息，并确认它与本机二进制逐字节一致；Linux x64 的同 revision 分发包也已核验，GitHub Actions 会验证其实际功能。[固定分发版本](https://www.npmjs.com/package/bun/v/1.4.3-canary.20261021.1) · [Bun 原生 lint](https://bun.com/docs/lint)
 
 ## 源码与产物
 
@@ -48,7 +48,7 @@ bun run check
 bun run pack
 ```
 
-`test` 先构建，再用 Node 的 `node:test` 运行回归；原生 `bun:test` API 迁移留待后续阶段。`check` 汇总类型、lint、格式检查和测试。`pack` 的 prepack 钩子会重新构建，因此干净源码也可直接打包。修改依赖后提交 `package.json` 和 `bun.lock`；格式化单独提交，方便审查。
+`test` 先构建，再以原生 `bun:test` 运行隔离回归；`test:ci` 额外输出固定随机 seed、JUnit 和覆盖率。复现方式、迁移覆盖和运行时边界见[测试与 CI](testing.md)。`check` 汇总类型、lint、格式检查和测试。`pack` 的 prepack 钩子会重新构建，因此干净源码也可直接打包。修改依赖后提交 `package.json` 和 `bun.lock`；格式化单独提交，方便审查。
 
 ## 安装包验收
 
@@ -58,11 +58,11 @@ bun run verify:package --keep
 bun run verify:host --dsh /usr/local/bin/dsh artifacts/local-decision-review-0.1.0.tgz
 ```
 
-`verify:package` 从当前 Git 源文件及尚未提交的新增源文件创建两个独立临时副本，不复制忽略的依赖、产物或配置文件；分别冻结安装、严格检查、构建并打包，比较 tarball SHA-256。它会核对包内的九个文件，在空缓存目录中离线生产安装，并用 Node 验证包导出和运行资源，再针对已安装产物重跑不依赖第三方测试工具的回归。真实 React DOM 测试在干净源码副本中执行，其 React/jsdom 仅为开发依赖。
+`verify:package` 从当前 Git 源文件及尚未提交的新增源文件创建两个独立临时副本，不复制忽略的依赖、产物或配置文件；分别冻结安装、严格检查、构建并打包，比较 tarball SHA-256。它会核对包内的九个文件，在空缓存目录中离线生产安装，并用 Node 验证包导出和运行资源，再由 Bun 针对已安装产物重跑同一套回归，并在隔离 Node 子进程中验证关键生产行为。真实 React DOM 测试在干净源码副本与独立安装产物测试目录中执行，其 React/jsdom 仅为测试工具依赖，不进入生产消费目录。
 
 `verify:host` 需要已安装的 DSH 和 Python 3，使用临时 profile，验证真实宿主安装、启用、认证 API、客户端资源、中英文元数据及图标；不调用模型。执行范围和版本来源见[宿主验证说明](host-verification.md)。
 
-这些证据分为三层：Node 与真实 React DOM 下的模拟宿主回归、安装包隔离验收、已安装 DSH 的实际加载与资源/API 验收。它们没有覆盖真实 DSH 浏览器页面的完整交互，也不证明付费模型的判定准确率。
+这些证据分为三层：Bun 与真实 React DOM 下的模拟宿主回归、安装包隔离验收、已安装 DSH 的实际加载与资源/API 验收。它们没有覆盖真实 DSH 浏览器页面的完整交互，也不证明付费模型的判定准确率。
 
 ## 本地安装
 
@@ -75,6 +75,6 @@ dsh plugin --profile YOUR_PROFILE add ./artifacts/local-decision-review-0.1.0.tg
 
 安装只需要 tarball 与支持版本的 DSH，不需要仓库源码、Bun、开发依赖或开发服务器。不要把源码目录直接作为插件安装。启用本插件时，官方 auto-review 插件应保持禁用；两者使用同一个 Auto 集成槽位。
 
-本阶段保留 PR #2 的生命周期、授权、无损多行规则和 i18n 行为。DSH rc.1 的同值权限选择不写事件，以及未修改宿主忽略 Auto presentation metadata 的限制仍然存在，详见 README。后续的深入 TSX 拆分、原生 Bun 测试 API、热更新预览及 UI 库接入不在本阶段内。
+本阶段保留 PR #2 的生命周期、授权、无损多行规则和 i18n 行为。DSH rc.1 的同值权限选择不写事件，以及未修改宿主忽略 Auto presentation metadata 的限制仍然存在，详见 README。后续的深入 TSX 拆分、热更新预览及 UI 库接入不在本阶段内。
 
 类型迁移保留了合法输入的原有裁决与协议。解析边界有两处小调整：评审日志中的非对象 JSON 记录会被跳过；部分畸形 Decisions 字段返回明确的校验错误，仍然失败关闭。公开辅助函数原有的数字字符串置信度比较和空拒绝原因回退也保留了回归覆盖。
