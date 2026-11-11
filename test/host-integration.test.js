@@ -19,7 +19,10 @@ describe('profile directory', () => {
   afterEach(() => {
     removeDir(hostProfile)
     removeDir(envProfile)
-    for (const [key, value] of [['DSH_PROFILE_DIR', savedEnv.dir], ['HOME', savedEnv.home]]) {
+    for (const [key, value] of [
+      ['DSH_PROFILE_DIR', savedEnv.dir],
+      ['HOME', savedEnv.home],
+    ]) {
       if (value === undefined) delete process.env[key]
       else process.env[key] = value
     }
@@ -30,7 +33,9 @@ describe('profile directory', () => {
   async function saveModel(host) {
     apply(host.ctx)
     const route = host.routes.get('/api/decision-review/save')
-    await route.fetch(jsonRequest('http://127.0.0.1/api/decision-review/save', { settings: { model: 'written-by-test' } }))
+    await route.fetch(
+      jsonRequest('http://127.0.0.1/api/decision-review/save', { settings: { model: 'written-by-test' } }),
+    )
   }
 
   it('follows the host profile context rather than the desktop default', async () => {
@@ -61,7 +66,9 @@ describe('Auto preset lifecycle', () => {
   let profileDir
   let host
 
-  beforeEach(() => { profileDir = makeProfileDir() })
+  beforeEach(() => {
+    profileDir = makeProfileDir()
+  })
   afterEach(async () => {
     await host?.dispose()
     host = undefined
@@ -78,9 +85,15 @@ describe('Auto preset lifecycle', () => {
 
   function sessionLog(id, header = { isSeeded: false }, events = []) {
     return {
-      id, header, events,
-      get seq() { return events.length },
-      append(type, data) { events.push({ seq: this.seq, time: 0, type, data }) },
+      id,
+      header,
+      events,
+      get seq() {
+        return events.length
+      },
+      append(type, data) {
+        events.push({ seq: this.seq, time: 0, type, data })
+      },
     }
   }
 
@@ -94,18 +107,25 @@ describe('Auto preset lifecycle', () => {
   // the writable Agent. The permission service's prepended listener fills
   // absent permission facts; Auto and an explicit setup choice are retained.
   function mountCreation() {
-    mount({
-      setPreset(session, preset) {
-        session.append('permission/preset', { preset })
-        session.append('sandbox/mode', { mode: 'danger-full-access' })
+    mount(
+      {
+        setPreset(session, preset) {
+          session.append('permission/preset', { preset })
+          session.append('sandbox/mode', { mode: 'danger-full-access' })
+        },
       },
-    }, (ctx) => {
-      ctx.on('agent/created', ({ agent: { session } }) => {
-        for (const { type, data } of workspacePin()) {
-          if (!session.events.some((event) => event.type === type)) session.append(type, data)
-        }
-      }, { prepend: true })
-    })
+      (ctx) => {
+        ctx.on(
+          'agent/created',
+          ({ agent: { session } }) => {
+            for (const { type, data } of workspacePin()) {
+              if (!session.events.some((event) => event.type === type)) session.append(type, data)
+            }
+          },
+          { prepend: true },
+        )
+      },
+    )
   }
 
   async function created(session, { source = 'startup', setup, signal } = {}) {
@@ -121,18 +141,23 @@ describe('Auto preset lifecycle', () => {
     const session = sessionLog('fresh-main')
     await created(session)
     assert.deepEqual(host.presetCalls, [{ session, preset: 'auto' }])
-    assert.deepEqual(session.events.map(({ type, data }) => [type, data]), [
-      ['permission/preset', { preset: 'auto' }],
-      ['sandbox/mode', { mode: 'danger-full-access' }],
-      ['approval/policy', { policy: 'ask' }],
-    ])
+    assert.deepEqual(
+      session.events.map(({ type, data }) => [type, data]),
+      [
+        ['permission/preset', { preset: 'auto' }],
+        ['sandbox/mode', { mode: 'danger-full-access' }],
+        ['approval/policy', { policy: 'ask' }],
+      ],
+    )
   })
 
   it('preserves an explicit setup choice even if it matches the host default pin', async () => {
     mountCreation()
     const session = sessionLog('chosen-main')
     await created(session, {
-      setup: (live) => { for (const { type, data } of workspacePin()) live.append(type, data) },
+      setup: (live) => {
+        for (const { type, data } of workspacePin()) live.append(type, data)
+      },
     })
     assert.deepEqual(session.events, workspacePin())
     assert.deepEqual(host.presetCalls, [])
@@ -144,9 +169,10 @@ describe('Auto preset lifecycle', () => {
       const seed = { seq: 0, time: 0, type: 'session/end-seed', data: {} }
       const session = sessionLog(source, undefined, [seed])
       await created(session, { source })
-      assert.deepEqual(session.events.map((event) => [event.type, event.data]), [
-        [seed.type, seed.data], ...workspacePin().map((event) => [event.type, event.data]),
-      ])
+      assert.deepEqual(
+        session.events.map((event) => [event.type, event.data]),
+        [[seed.type, seed.data], ...workspacePin().map((event) => [event.type, event.data])],
+      )
     }
     assert.deepEqual(host.presetCalls, [])
   })
@@ -185,11 +211,14 @@ describe('Auto preset lifecycle', () => {
     const other = sessionLog('other')
     mount({
       sessions: [auto, other, childAuto],
-      currentPreset: (session) => session === other ? 'workspace-write' : 'auto',
+      currentPreset: (session) => (session === other ? 'workspace-write' : 'auto'),
       setPreset: () => assert.equal(host.autoRegistered, true),
     })
     await host.dispose()
-    assert.deepEqual(host.presetCalls, [auto, childAuto].map((session) => ({ session, preset: 'danger-full-access' })))
+    assert.deepEqual(
+      host.presetCalls,
+      [auto, childAuto].map((session) => ({ session, preset: 'danger-full-access' })),
+    )
     assert.equal(host.autoRegistered, false)
     assert.equal(host.listeners.has('tools/pre-execute'), false)
     assert.equal(host.listeners.has('agent/created'), false)

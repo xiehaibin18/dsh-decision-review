@@ -38,7 +38,11 @@ export function makeHost(options = {}) {
   }
   const ctx = {
     permissionPresets: {
-      current: (session) => selected.get(session) ?? (typeof options.currentPreset === 'function' ? options.currentPreset(session) : options.currentPreset ?? 'auto'),
+      current: (session) =>
+        selected.get(session) ??
+        (typeof options.currentPreset === 'function'
+          ? options.currentPreset(session)
+          : (options.currentPreset ?? 'auto')),
       set: (session, preset) => {
         if (preset === 'auto') {
           assertAutoRegistered()
@@ -51,7 +55,9 @@ export function makeHost(options = {}) {
       registerAuto: (admit, presentation) => {
         admitAuto = admit
         autoPresentation = presentation
-        return () => { admitAuto = undefined }
+        return () => {
+          admitAuto = undefined
+        }
       },
     },
     approval: { overrideOf: () => options.approvalOverride ?? 'ask' },
@@ -77,7 +83,14 @@ export function makeHost(options = {}) {
     inject(_dependencies, setup) {
       setup({
         effect,
-        connection: { fetch: { register: (route) => { routes.set(route.path, route); return () => routes.delete(route.path) } } },
+        connection: {
+          fetch: {
+            register: (route) => {
+              routes.set(route.path, route)
+              return () => routes.delete(route.path)
+            },
+          },
+        },
       })
     },
   }
@@ -91,8 +104,12 @@ export function makeHost(options = {}) {
     listeners: { get: (event) => listeners.get(event)?.[0], has: (event) => listeners.has(event) },
     routes,
     presetCalls,
-    get autoRegistered() { return admitAuto !== undefined },
-    get autoPresentation() { return autoPresentation },
+    get autoRegistered() {
+      return admitAuto !== undefined
+    },
+    get autoPresentation() {
+      return autoPresentation
+    },
     async emit(event, ...args) {
       for (const listener of [...(listeners.get(event) ?? [])]) await listener(...args)
     },
@@ -106,9 +123,21 @@ export function makeHost(options = {}) {
 export function makeSession(id = 'test-session', header = { origin: 'main' }) {
   const args = JSON.stringify({ command: 'npm test' })
   const events = [
-    { seq: 0, type: 'user/message', data: { source: { kind: 'user', rpcId: 'fixture' }, content: [{ type: 'text', text: 'Run tests.' }] } },
+    {
+      seq: 0,
+      type: 'user/message',
+      data: { source: { kind: 'user', rpcId: 'fixture' }, content: [{ type: 'text', text: 'Run tests.' }] },
+    },
     { seq: 1, type: 'step/start', data: { turn: 0, step: 0 } },
-    { seq: 2, type: 'assistant/message', data: { turn: 0, step: 0, message: { content: [{ type: 'tool-call', id: 'call-1', name: 'bash', arguments: args }] } } },
+    {
+      seq: 2,
+      type: 'assistant/message',
+      data: {
+        turn: 0,
+        step: 0,
+        message: { content: [{ type: 'tool-call', id: 'call-1', name: 'bash', arguments: args }] },
+      },
+    },
     { seq: 3, type: 'tool/call', data: { turn: 0, step: 0, callId: 'call-1', name: 'bash', arguments: args } },
   ]
   return {
@@ -116,7 +145,10 @@ export function makeSession(id = 'test-session', header = { origin: 'main' }) {
     header,
     surface: { nodes: [0, 2] },
     snapshotEvents: () => events,
-    requestHeader: () => ({ config: { provider: 'fixture', model: 'fixture' }, tools: [{ name: 'bash', description: 'Run a command.', parameters: { type: 'object' } }] }),
+    requestHeader: () => ({
+      config: { provider: 'fixture', model: 'fixture' },
+      tools: [{ name: 'bash', description: 'Run a command.', parameters: { type: 'object' } }],
+    }),
     isOwnSeq: () => true,
   }
 }
@@ -133,14 +165,24 @@ export function makeExec(session, overrides = {}) {
   }
 }
 
-const PREDICATES = ['exfiltration', 'irreversible_deletion', 'production_effect', 'security_change', 'session_created_cleanup', 'explicit_authorization']
+const PREDICATES = [
+  'exfiltration',
+  'irreversible_deletion',
+  'production_effect',
+  'security_change',
+  'session_created_cleanup',
+  'explicit_authorization',
+]
 
 /** A complete, valid Decisions answer list; `overrides` patch single answers by name. */
 export function makeAnswers({ risk = 'low', confidence = 0.95, probability = 0, overrides = {}, rule } = {}) {
   const answers = [{ name: 'risk_class', type: 'choice', choice: risk, confidence }]
   for (const name of PREDICATES) answers.push({ name, type: 'predicate', probability })
-  if (rule !== undefined) answers.push({ name: 'operator_rule', type: 'choice', choice: rule.choice, confidence: rule.confidence ?? 0.95 })
-  return answers.map((answer) => (overrides[answer.name] === undefined ? answer : { name: answer.name, ...overrides[answer.name] }))
+  if (rule !== undefined)
+    answers.push({ name: 'operator_rule', type: 'choice', choice: rule.choice, confidence: rule.confidence ?? 0.95 })
+  return answers.map((answer) =>
+    overrides[answer.name] === undefined ? answer : { name: answer.name, ...overrides[answer.name] },
+  )
 }
 
 /** Replace global fetch with a stub returning `answersFor(body, init)`; returns the call log. */
@@ -149,7 +191,9 @@ export function stubDecisionsFetch(answersFor) {
   mock.method(globalThis, 'fetch', async (url, init) => {
     const body = JSON.parse(init.body)
     calls.push({ url, init, body })
-    return new Response(JSON.stringify({ answers: await answersFor(body, init, calls.length) }), { headers: { 'content-type': 'application/json' } })
+    return new Response(JSON.stringify({ answers: await answersFor(body, init, calls.length) }), {
+      headers: { 'content-type': 'application/json' },
+    })
   })
   return calls
 }

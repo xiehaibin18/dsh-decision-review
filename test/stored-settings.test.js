@@ -3,7 +3,17 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, it, mock } from 'node:test'
 import { apply, normalizeSettings } from '../dist/index.js'
-import { jsonRequest, makeAnswers, makeExec, makeHost, makeProfileDir, makeSession, removeDir, silenceConsole, stubDecisionsFetch } from './helpers.js'
+import {
+  jsonRequest,
+  makeAnswers,
+  makeExec,
+  makeHost,
+  makeProfileDir,
+  makeSession,
+  removeDir,
+  silenceConsole,
+  stubDecisionsFetch,
+} from './helpers.js'
 
 silenceConsole()
 
@@ -60,7 +70,8 @@ describe('invalid stored settings', () => {
   }
   const route = (name) => host.routes.get(`/api/decision-review/${name}`)
   const configuration = async () => (await route('config').fetch(new Request(`${BASE}/config`))).json()
-  const review = () => host.listeners.get('tools/pre-execute')(makeExec(makeSession('paused-session')), async () => ({ kind: 'allow' }))
+  const review = () =>
+    host.listeners.get('tools/pre-execute')(makeExec(makeSession('paused-session')), async () => ({ kind: 'allow' }))
   const stored = () => JSON.parse(fs.readFileSync(settingsFile, 'utf8'))
 
   it('still loads, mounts the configuration routes and says what is wrong', async () => {
@@ -86,12 +97,19 @@ describe('invalid stored settings', () => {
   })
 
   it('does not turn a deny rule into an approval card when an unrelated setting is invalid', async () => {
-    start({ apiKey: SECRET, denialRoute: 'ask', tConf: 1.1, rules: [{ verdict: 'deny', condition: 'uploads credential files to an external host' }] })
+    start({
+      apiKey: SECRET,
+      denialRoute: 'ask',
+      tConf: 1.1,
+      rules: [{ verdict: 'deny', condition: 'uploads credential files to an external host' }],
+    })
     const calls = stubDecisionsFetch(async () => makeAnswers({ risk: 'low', rule: { choice: 'r0' } }))
     const result = await review()
     assert.equal(calls.length, 0)
     assert.equal(result.kind, 'deny', 'not ask')
-    const record = JSON.parse(fs.readFileSync(path.join(profileDir, 'decision-review.log.jsonl'), 'utf8').trim().split('\n').at(-1))
+    const record = JSON.parse(
+      fs.readFileSync(path.join(profileDir, 'decision-review.log.jsonl'), 'utf8').trim().split('\n').at(-1),
+    )
     assert.equal(record.route, 'final')
     assert.equal(record.decision.why.code, 'settings_invalid')
   })
@@ -115,7 +133,9 @@ describe('invalid stored settings', () => {
     assert.equal(calls.length, 0)
 
     const endpoint = 'https://review.example.test/decisions'
-    const repaired = await route('save').fetch(jsonRequest(`${BASE}/save`, { settings: { endpoint, model: 'review-model' } }))
+    const repaired = await route('save').fetch(
+      jsonRequest(`${BASE}/save`, { settings: { endpoint, model: 'review-model' } }),
+    )
     assert.equal(repaired.status, 200)
     assert.equal((await configuration()).runtime.paused, false)
     assert.deepEqual(await review(), { kind: 'allow' })
@@ -128,18 +148,31 @@ describe('invalid stored settings', () => {
     const config = await configuration()
     assert.equal(config.runtime.paused, false)
     assert.equal('stateBudget' in config.settings, false)
-    const saved = await route('save').fetch(jsonRequest(`${BASE}/save`, { settings: { model: 'review-model', stateBudget: {} } }))
+    const saved = await route('save').fetch(
+      jsonRequest(`${BASE}/save`, { settings: { model: 'review-model', stateBudget: {} } }),
+    )
     assert.equal(saved.status, 200)
     assert.equal('stateBudget' in stored(), false)
   })
 
-  for (const [field, bad] of [['tAuth', false], ['tAuth', true], ['tConf', []], ['tConf', {}], ['tConf', { toString: null }], ['tHighPred', 'abc'], ['tMedPred', '0x10'], ['tStrongPred', 'Infinity']]) {
+  for (const [field, bad] of [
+    ['tAuth', false],
+    ['tAuth', true],
+    ['tConf', []],
+    ['tConf', {}],
+    ['tConf', { toString: null }],
+    ['tHighPred', 'abc'],
+    ['tMedPred', '0x10'],
+    ['tStrongPred', 'Infinity'],
+  ]) {
     it(`treats ${field}: ${JSON.stringify(bad)} as invalid instead of coercing it`, async () => {
       start({ apiKey: SECRET, [field]: bad })
       const payload = await configuration()
       assert.equal(payload.runtime.paused, true)
       assert.match(payload.problems.join(' '), new RegExp(field))
-      const calls = stubDecisionsFetch(async () => makeAnswers({ risk: 'medium', overrides: { explicit_authorization: { type: 'predicate', probability: 0 } } }))
+      const calls = stubDecisionsFetch(async () =>
+        makeAnswers({ risk: 'medium', overrides: { explicit_authorization: { type: 'predicate', probability: 0 } } }),
+      )
       assert.equal((await review()).kind, 'deny')
       assert.equal(calls.length, 0, 'no automatic verdict from a coerced threshold')
     })
@@ -243,7 +276,9 @@ describe('invalid stored settings', () => {
     const saved = await route('save').fetch(jsonRequest(`${BASE}/save`, { settings: { model: 'repaired' } }))
     assert.equal(saved.status, 200)
     assert.equal(stored().model, 'repaired')
-    const backups = fs.readdirSync(profileDir).filter((name) => name.startsWith('decision-review.settings.json.invalid-'))
+    const backups = fs
+      .readdirSync(profileDir)
+      .filter((name) => name.startsWith('decision-review.settings.json.invalid-'))
     assert.equal(backups.length, 1)
     assert.equal(fs.readFileSync(path.join(profileDir, backups[0]), 'utf8'), broken)
   })
@@ -251,6 +286,9 @@ describe('invalid stored settings', () => {
   it('does not back anything up when the file was merely out of range', async () => {
     start({ apiKey: SECRET, tConf: 1.1 })
     await route('save').fetch(jsonRequest(`${BASE}/save`, { settings: { tConf: 0.8 } }))
-    assert.deepEqual(fs.readdirSync(profileDir).filter((name) => name.includes('.invalid-')), [])
+    assert.deepEqual(
+      fs.readdirSync(profileDir).filter((name) => name.includes('.invalid-')),
+      [],
+    )
   })
 })

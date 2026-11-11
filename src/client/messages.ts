@@ -1,16 +1,18 @@
-import type { LocaleRuntime, Translate as HostTranslate } from '@deepseek-ai/dsh-client-locale/client';
+import type { LocaleRuntime, Translate as HostTranslate } from '@deepseek-ai/dsh-client-locale/client'
 
-export const NS = 'decision-review';
+export const NS = 'decision-review'
 
 // The package metadata in locale/*.json is separate from these runtime dictionaries.
 const en = {
   'panel.title': 'Authorization review',
-  'panel.desc': 'Review tool calls with the independent OpenAI Decisions API or with the model used by the current session.',
+  'panel.desc':
+    'Review tool calls with the independent OpenAI Decisions API or with the model used by the current session.',
   'panel.loading': 'Loading settings…',
   'engine.label': 'Review engine',
   'engine.decisions': 'Decisions (independent reviewer)',
   'engine.session': 'Follow session (session model)',
-  'engine.repair': 'Fix the saved Decisions API URL or model below to resume review. You can keep Follow session selected.',
+  'engine.repair':
+    'Fix the saved Decisions API URL or model below to resume review. You can keep Follow session selected.',
   'endpoint.label': 'Decisions API URL',
   'apikey.label': 'API key',
   'apikey.hint': 'The key is stored in plaintext in the profile directory.',
@@ -31,9 +33,9 @@ const en = {
   'thresholds.tMedPred': 'tMedPred — Weak signal threshold for medium risk',
   'thresholds.tStrongPred': 'tStrongPred — Strong signal threshold for medium risk',
   'thresholds.tAuth': 'tAuth — Authorization threshold for allowing medium risk',
-  'save': 'Save',
-  'saving': 'Saving…',
-  'saved': 'Settings saved.',
+  save: 'Save',
+  saving: 'Saving…',
+  saved: 'Settings saved.',
   'save.invalid': 'Fix the highlighted rules before saving.',
   'load.error': 'Could not load settings.',
   'save.error': 'Could not save settings.',
@@ -49,8 +51,10 @@ const en = {
   'problems.desc': 'Calls that need review are being denied. Check the settings below and save to resume review.',
   'rules.title': 'Custom rules',
   'rules.hint': 'Describe the action and the circumstances the reviewer should match.',
-  'rules.engine.decisions': 'Decisions applies the selected verdict when the reviewer confidently matches a rule, within the engine’s risk limits. A matched “Deny” rule always stops the call, even when reviewer denials normally ask for approval.',
-  'rules.engine.session': 'These rules guide the session reviewer. “Deny” tells the model to refuse the call; any refusal still follows your setting for reviewer denials.',
+  'rules.engine.decisions':
+    'Decisions applies the selected verdict when the reviewer confidently matches a rule, within the engine’s risk limits. A matched “Deny” rule always stops the call, even when reviewer denials normally ask for approval.',
+  'rules.engine.session':
+    'These rules guide the session reviewer. “Deny” tells the model to refuse the call; any refusal still follows your setting for reviewer denials.',
   'rules.summary': 'Rules: {count}/{maxCount} · Condition characters: {total}/{maxTotal}',
   'rules.empty.title': 'No custom rules yet',
   'rules.empty.desc': 'The engine uses its built-in policy. Add a rule to tailor how it handles a specific action.',
@@ -98,9 +102,9 @@ const en = {
   'test.basis.error': 'The reviewer could not complete this scenario.',
   'pill.label': '{n} reviewed · {p}% auto-passed',
   'pill.title': 'Auto review this session: {n} calls · {auto} auto-passed · {asked} asked · {denied} denied',
-};
+}
 
-type MessageKey = keyof typeof en;
+type MessageKey = keyof typeof en
 
 const zh = {
   'panel.title': '授权评审',
@@ -130,9 +134,9 @@ const zh = {
   'thresholds.tMedPred': 'tMedPred — 中风险弱信号阈值',
   'thresholds.tStrongPred': 'tStrongPred — 中风险强信号阈值',
   'thresholds.tAuth': 'tAuth — 中风险放行的授权阈值',
-  'save': '保存',
-  'saving': '正在保存…',
-  'saved': '设置已保存。',
+  save: '保存',
+  saving: '正在保存…',
+  saved: '设置已保存。',
   'save.invalid': '请修正有提示的规则后再保存。',
   'load.error': '无法加载设置。',
   'save.error': '无法保存设置。',
@@ -148,8 +152,10 @@ const zh = {
   'problems.desc': '所有需要评审的调用都会被拒绝。请检查下方设置并保存，以恢复评审。',
   'rules.title': '自定义规则',
   'rules.hint': '描述要匹配的操作及其适用情形。',
-  'rules.engine.decisions': '评审模型有把握地匹配到规则后，Decisions 会在引擎的风险限制内执行所选结论。命中「拒绝」规则时会直接阻止调用，即使一般的评审拒绝会转人工审批。',
-  'rules.engine.session': '规则用于指导会话评审模型。「拒绝」会要求模型拒绝调用；模型给出的拒绝仍按上方的评审拒绝设置处理。',
+  'rules.engine.decisions':
+    '评审模型有把握地匹配到规则后，Decisions 会在引擎的风险限制内执行所选结论。命中「拒绝」规则时会直接阻止调用，即使一般的评审拒绝会转人工审批。',
+  'rules.engine.session':
+    '规则用于指导会话评审模型。「拒绝」会要求模型拒绝调用；模型给出的拒绝仍按上方的评审拒绝设置处理。',
   'rules.summary': '规则：{count}/{maxCount} 条 · 条件总长：{total}/{maxTotal} 个字符',
   'rules.empty.title': '还没有自定义规则',
   'rules.empty.desc': '评审引擎目前使用内置策略。添加规则，可指定某类操作的处理方式。',
@@ -197,14 +203,14 @@ const zh = {
   'test.basis.error': '评审未能完成此场景。',
   'pill.label': '自动评审 {n} 次 · 自动放行率 {p}%',
   'pill.title': '本次会话自动评审 {n} 次：自动放行 {auto} · 请求审批 {asked} · 拒绝 {denied}',
-} satisfies Record<MessageKey, string>;
+} satisfies Record<MessageKey, string>
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    'decision-review': MessageKey;
+    'decision-review': MessageKey
   }
 }
 
-export const MESSAGES = { en, zh };
-export type Translate = HostTranslate<MessageKey>;
-export type ResolveText = LocaleRuntime['resolveText'];
+export const MESSAGES = { en, zh }
+export type Translate = HostTranslate<MessageKey>
+export type ResolveText = LocaleRuntime['resolveText']

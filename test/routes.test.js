@@ -3,7 +3,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, it, mock } from 'node:test'
 import { apply } from '../dist/index.js'
-import { jsonRequest, makeAnswers, makeHost, makeProfileDir, removeDir, silenceConsole, stubDecisionsFetch } from './helpers.js'
+import {
+  jsonRequest,
+  makeAnswers,
+  makeHost,
+  makeProfileDir,
+  removeDir,
+  silenceConsole,
+  stubDecisionsFetch,
+} from './helpers.js'
 
 silenceConsole()
 
@@ -75,7 +83,10 @@ describe('Connection routes', () => {
 
   it('rejects a bad save with a 4xx and leaves the stored settings alone', async () => {
     const before = fs.readFileSync(settingsFile, 'utf8')
-    const badRule = await call('save', jsonRequest(`${BASE}/save`, { settings: { rules: [{ verdict: 'permit', condition: 'x' }] } }))
+    const badRule = await call(
+      'save',
+      jsonRequest(`${BASE}/save`, { settings: { rules: [{ verdict: 'permit', condition: 'x' }] } }),
+    )
     assert.equal(badRule.status, 400)
     assert.match((await badRule.json()).error, /rule 1/)
     const badTimeout = await call('save', jsonRequest(`${BASE}/save`, { settings: { timeoutMs: 5000.5 } }))
@@ -88,7 +99,19 @@ describe('Connection routes', () => {
   it('rejects explicit invalid endpoints and model values without changing the saved route', async () => {
     const before = fs.readFileSync(settingsFile, 'utf8')
     const invalid = {
-      endpoint: [null, false, 12, [], {}, ' ', '/v1/decisions', 'https:', 'http:///example.test', 'ftp://example.test', 'https://user:password@example.test'],
+      endpoint: [
+        null,
+        false,
+        12,
+        [],
+        {},
+        ' ',
+        '/v1/decisions',
+        'https:',
+        'http:///example.test',
+        'ftp://example.test',
+        'https://user:password@example.test',
+      ],
       model: [null, false, 12, [], {}, ' '],
     }
     for (const [field, values] of Object.entries(invalid)) {
@@ -113,9 +136,17 @@ describe('Connection routes', () => {
   })
 
   it('requires a JSON body on writes', async () => {
-    const plain = new Request(`${BASE}/save`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ settings: { model: 'x' } }) })
+    const plain = new Request(`${BASE}/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: JSON.stringify({ settings: { model: 'x' } }),
+    })
     assert.equal((await call('save', plain)).status, 415)
-    const broken = new Request(`${BASE}/save`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' })
+    const broken = new Request(`${BASE}/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{',
+    })
     assert.equal((await call('save', broken)).status, 400)
     const oversized = jsonRequest(`${BASE}/save`, { settings: { model: 'x'.repeat(70000) } })
     assert.equal((await call('save', oversized)).status, 413)
@@ -144,7 +175,10 @@ describe('Connection routes', () => {
       })
       const payload = await (await call('test', jsonRequest(`${BASE}/test`, {}))).json()
       assert.equal(payload.results.length, 3)
-      assert.deepEqual(calls.map((entry) => entry.body.model), ['model-a', 'model-a', 'model-a'])
+      assert.deepEqual(
+        calls.map((entry) => entry.body.model),
+        ['model-a', 'model-a', 'model-a'],
+      )
       assert.equal(stored().model, 'model-after-save')
     })
 
@@ -152,10 +186,18 @@ describe('Connection routes', () => {
       const calls = stubDecisionsFetch(async () => makeAnswers())
       const caller = new AbortController()
       caller.abort()
-      const aborted = new Request(`${BASE}/test`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', signal: caller.signal })
+      const aborted = new Request(`${BASE}/test`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+        signal: caller.signal,
+      })
       await call('test', aborted)
       assert.ok(calls.length > 0)
-      assert.ok(calls.every((entry) => entry.init.signal.aborted), 'every upstream request must carry the caller’s cancellation')
+      assert.ok(
+        calls.every((entry) => entry.init.signal.aborted),
+        'every upstream request must carry the caller’s cancellation',
+      )
     })
 
     it('reports an upstream failure as a row instead of failing the whole run', async () => {

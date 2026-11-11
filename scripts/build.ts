@@ -17,23 +17,31 @@ interface BuildMetadata {
 async function bundle(target: 'server' | 'client') {
   const output = join(staging, `${target}.js`)
   const metafile = join(staging, `${target}.json`)
-  execFileSync(process.execPath, [
-    '--no-env-file', 'build', `src/${target}/index.ts`,
-    '--packages=bundle', '--reject-unresolved', '--sourcemap=none',
-    `--target=${target === 'server' ? 'node' : 'browser'}`,
-    `--format=${target === 'server' ? 'esm' : 'cjs'}`,
-    `--outfile=${output}`, `--metafile=${metafile}`,
-    ...(target === 'client' ? sharedClientModules.map((name) => `--external=${name}`) : []),
-  ], { cwd: root, stdio: 'inherit' })
+  execFileSync(
+    process.execPath,
+    [
+      '--no-env-file',
+      'build',
+      `src/${target}/index.ts`,
+      '--packages=bundle',
+      '--reject-unresolved',
+      '--sourcemap=none',
+      `--target=${target === 'server' ? 'node' : 'browser'}`,
+      `--format=${target === 'server' ? 'esm' : 'cjs'}`,
+      `--outfile=${output}`,
+      `--metafile=${metafile}`,
+      ...(target === 'client' ? sharedClientModules.map((name) => `--external=${name}`) : []),
+    ],
+    { cwd: root, stdio: 'inherit' },
+  )
   // The manifest is emitted by the pinned bundler in this invocation.
   const metadata: BuildMetadata = JSON.parse(await readFile(metafile, 'utf8'))
   if (Object.keys(metadata.outputs).length !== 1) throw new Error(`Expected one ${target} JavaScript bundle`)
   for (const input of Object.values(metadata.inputs)) {
     for (const dependency of input.imports) {
       if (!dependency.external) continue
-      const allowed = target === 'server'
-        ? dependency.path.startsWith('node:')
-        : sharedClientModules.includes(dependency.path)
+      const allowed =
+        target === 'server' ? dependency.path.startsWith('node:') : sharedClientModules.includes(dependency.path)
       if (!allowed) throw new Error(`Unexpected ${target} runtime dependency: ${dependency.path}`)
     }
   }

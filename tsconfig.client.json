@@ -1,20 +1,9 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": [
-      "react"
-    ],
-    "lib": [
-      "ES2024",
-      "DOM",
-      "DOM.Iterable",
-      "ESNext.Disposable"
-    ],
+    "types": ["react"],
+    "lib": ["ES2024", "DOM", "DOM.Iterable", "ESNext.Disposable"],
     "preserveSymlinks": true
   },
-  "include": [
-    "src/client/**/*.ts",
-    "src/client/**/*.tsx",
-    "src/shared/**/*.ts"
-  ]
+  "include": ["src/client/**/*.ts", "src/client/**/*.tsx", "src/shared/**/*.ts"]
 }

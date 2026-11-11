@@ -23,8 +23,11 @@ function digest(bytes: Buffer) {
 async function copySources(destination: string) {
   // Includes pending source edits, but never ignored dependencies, outputs or profile data.
   const names = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
-    cwd: root, encoding: 'utf8',
-  }).split('\0').filter(Boolean)
+    cwd: root,
+    encoding: 'utf8',
+  })
+    .split('\0')
+    .filter(Boolean)
   for (const name of new Set(names)) {
     const source = join(root, name)
     const stat = await lstat(source).catch(() => undefined)
@@ -55,23 +58,40 @@ try {
   assert.equal(checksum, digest(await readFile(second)), 'Separate clean source builds must produce identical tarballs')
   const entries = execFileSync('tar', ['-tzf', first], { encoding: 'utf8' }).trim().split('\n').sort()
   const expected = [
-    'package/LICENSE.upstream', 'package/README.md', 'package/package.json',
-    'package/dist/index.js', 'package/dist/client.js', 'package/dist/cordis.patch.yml',
-    'package/dist/icon.svg', 'package/dist/locale/en.json', 'package/dist/locale/zh.json',
+    'package/LICENSE.upstream',
+    'package/README.md',
+    'package/package.json',
+    'package/dist/index.js',
+    'package/dist/client.js',
+    'package/dist/cordis.patch.yml',
+    'package/dist/icon.svg',
+    'package/dist/locale/en.json',
+    'package/dist/locale/zh.json',
   ].sort()
   assert.deepEqual(entries, expected, 'Only runtime artifacts and package documentation may be distributed')
 
   const consumer = join(scratch, 'consumer')
   await mkdir(consumer)
-  await writeFile(join(consumer, 'package.json'), JSON.stringify({ name: 'isolated-consumer', private: true, type: 'module' }))
-  run(bun, ['add', '--production', '--offline', '--ignore-scripts', '--cache-dir', join(scratch, 'empty-cache'), first], consumer)
+  await writeFile(
+    join(consumer, 'package.json'),
+    JSON.stringify({ name: 'isolated-consumer', private: true, type: 'module' }),
+  )
+  run(
+    bun,
+    ['add', '--production', '--offline', '--ignore-scripts', '--cache-dir', join(scratch, 'empty-cache'), first],
+    consumer,
+  )
   const installed = join(consumer, 'node_modules', '@local', 'decision-review')
   const manifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'))
   assert.equal(manifest.engines.dsh, '0.2.2-rc.1')
   assert.equal(manifest.dsh.bundle.patch, './dist/cordis.patch.yml')
   assert.equal(manifest.dsh.client.platform, 'web')
   assert.equal(manifest.dependencies, undefined, 'Runtime dependency closure should be entirely in the package')
-  assert.equal(manifest.peerDependencies, undefined, 'The host injects shared services; npm must not install a second host')
+  assert.equal(
+    manifest.peerDependencies,
+    undefined,
+    'The host injects shared services; npm must not install a second host',
+  )
   for (const path of ['src', 'scripts', 'node_modules']) {
     assert.equal(await lstat(join(installed, path)).catch(() => undefined), undefined)
   }
@@ -79,7 +99,9 @@ try {
     const javascript = await readFile(join(installed, 'dist', filename), 'utf8')
     assert.ok(!javascript.includes(root) && !javascript.includes(scratch), `${filename} contains a local source path`)
   }
-  await writeFile(join(consumer, 'probe.mjs'), `
+  await writeFile(
+    join(consumer, 'probe.mjs'),
+    `
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { Script } from 'node:vm'
@@ -98,7 +120,8 @@ new Script(script).runInNewContext({ window: { __ModuleLoader__: { load(value) {
 assert.equal(registration.id, '@local/decision-review')
 assert.equal(typeof registration.factory, 'function')
 console.info('Production-only package: Node exports, locales, icon and classic client registration passed')
-`)
+`,
+  )
   run('node', ['probe.mjs'], consumer)
 
   // Keep the original dependency-free regressions useful against the installed bytes.
@@ -112,7 +135,9 @@ console.info('Production-only package: Node exports, locales, icon and classic c
     if (name.endsWith('.test.js')) tests.push(join('test', name))
   }
   run('node', ['--test', ...tests], consumer)
-  console.info(`Verified two clean builds, identical package SHA-256 ${checksum}, offline production installation and installed regressions`)
+  console.info(
+    `Verified two clean builds, identical package SHA-256 ${checksum}, offline production installation and installed regressions`,
+  )
   if (keep) console.info(`Retained isolated verification directory: ${scratch}`)
 } finally {
   if (!keep) await rm(scratch, { recursive: true, force: true })

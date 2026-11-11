@@ -8,9 +8,18 @@ import { after, afterEach, before, beforeEach, describe, it, mock } from 'node:t
  * allowed) without a browser. */
 
 const SERVER_SETTINGS = {
-  engine: 'decisions', endpoint: 'https://api.example.test/v1/decisions', model: 'model-a',
-  timeoutMs: 60000, denialRoute: 'ask', tConf: 0.75, tHighPred: 0.85, tMedPred: 0.5, tStrongPred: 0.8, tAuth: 0.7,
-  rules: [], hasApiKey: true,
+  engine: 'decisions',
+  endpoint: 'https://api.example.test/v1/decisions',
+  model: 'model-a',
+  timeoutMs: 60000,
+  denialRoute: 'ask',
+  tConf: 0.75,
+  tHighPred: 0.85,
+  tMedPred: 0.5,
+  tStrongPred: 0.8,
+  tAuth: 0.7,
+  rules: [],
+  hasApiKey: true,
 }
 
 function createRenderer() {
@@ -32,10 +41,13 @@ function createRenderer() {
       const index = cursor++
       hooks[index] ??= { value: typeof initial === 'function' ? initial() : initial }
       const slot = hooks[index]
-      return [slot.value, (update) => {
-        slot.value = typeof update === 'function' ? update(slot.value) : update
-        render()
-      }]
+      return [
+        slot.value,
+        (update) => {
+          slot.value = typeof update === 'function' ? update(slot.value) : update
+          render()
+        },
+      ]
     },
     useRef(initial) {
       const index = cursor++
@@ -107,7 +119,9 @@ function createRenderer() {
       return control
     },
     button(caption) {
-      return [...walk(tree)].find((node) => node.type === 'button' && (node.props['aria-label'] ?? textOf(node)) === caption)
+      return [...walk(tree)].find(
+        (node) => node.type === 'button' && (node.props['aria-label'] ?? textOf(node)) === caption,
+      )
     },
     text() {
       return textOf(tree)
@@ -172,7 +186,7 @@ describe('configuration panel', () => {
                 messages = dictionaries
                 return () => {}
               },
-              resolveText: (text) => typeof text === 'string' ? text : (text[language] ?? text.en),
+              resolveText: (text) => (typeof text === 'string' ? text : (text[language] ?? text.en)),
             },
             slots: {
               inject: (_slot, setup) => setup(),
@@ -188,15 +202,22 @@ describe('configuration panel', () => {
     mock.method(globalThis, 'fetch', async (url, init) => {
       const body = init?.body === undefined ? undefined : JSON.parse(init.body)
       requests.push({ url, method: init?.method ?? 'GET', headers: init?.headers, body })
-      const reply = (payload, status = 200) => new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } })
-      if (url.endsWith('/config')) return reply({
-        settings: serverSettings, problems: serverProblems,
-        runtime: { engine: serverSettings.engine, accepting: true, active: 0, paused: serverProblems.length > 0 },
-      })
+      const reply = (payload, status = 200) =>
+        new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } })
+      if (url.endsWith('/config'))
+        return reply({
+          settings: serverSettings,
+          problems: serverProblems,
+          runtime: { engine: serverSettings.engine, accepting: true, active: 0, paused: serverProblems.length > 0 },
+        })
       if (url.endsWith('/save')) {
         if (saveGate) await saveGate
         const { apiKey, clearApiKey, ...fields } = body.settings
-        serverSettings = { ...serverSettings, ...fields, hasApiKey: clearApiKey ? false : (apiKey ? true : serverSettings.hasApiKey) }
+        serverSettings = {
+          ...serverSettings,
+          ...fields,
+          hasApiKey: clearApiKey ? false : apiKey ? true : serverSettings.hasApiKey,
+        }
         return reply({ ok: true, settings: serverSettings, problems: [] })
       }
       if (url.endsWith('/test')) return reply({ ok: true, results: serverResults })
@@ -216,8 +237,12 @@ describe('configuration panel', () => {
   const saveRequests = () => requests.filter((request) => request.url.endsWith('/save'))
 
   describe('invalid stored settings', () => {
-    before(() => { deferMount = true })
-    after(() => { deferMount = false })
+    before(() => {
+      deferMount = true
+    })
+    after(() => {
+      deferMount = false
+    })
     const open = async (problems) => {
       serverProblems = problems
       mount()
@@ -426,17 +451,27 @@ describe('configuration panel', () => {
     it('switches localized smoke results in place, including the server reason', async () => {
       serverResults = [
         { scenario: 'allow', ok: true, ms: 42, composed: { decision: 'allow', risk: 'low' } },
-        { scenario: 'exfil', ok: true, ms: 37, composed: {
-          decision: 'deny', risk: 'high', reason: 'raw engine reason',
-          display: { en: 'A credential would leave the machine.', zh: '凭据将发送到机器之外。' },
-        } },
+        {
+          scenario: 'exfil',
+          ok: true,
+          ms: 37,
+          composed: {
+            decision: 'deny',
+            risk: 'high',
+            reason: 'raw engine reason',
+            display: { en: 'A credential would leave the machine.', zh: '凭据将发送到机器之外。' },
+          },
+        },
         { scenario: 'install', ok: false, error: 'synthetic connection reset' },
       ]
       await button('test.run').props.onClick()
       const en = renderer.text()
       assert.match(en, /Run project tests.*Allowed.*Low risk/)
       assert.match(en, /Send credentials to an external URL.*Denied.*High risk.*A credential would leave the machine/)
-      assert.match(en, /Install a plugin.*Error.*could not complete this scenario.*Technical details.*synthetic connection reset/)
+      assert.match(
+        en,
+        /Install a plugin.*Error.*could not complete this scenario.*Technical details.*synthetic connection reset/,
+      )
 
       language = 'zh'
       mount()
@@ -451,7 +486,9 @@ describe('configuration panel', () => {
 
   it('does not overwrite edits made while a save is in flight', async () => {
     let release
-    saveGate = new Promise((resolve) => { release = resolve })
+    saveGate = new Promise((resolve) => {
+      release = resolve
+    })
     change('model.label', 'model-saved')
     button('rules.add').props.onClick()
     change('rules.condition.label', 'Condition to save')
@@ -488,7 +525,15 @@ describe('configuration panel', () => {
   })
 
   it('shows the route’s own error when a save fails', async () => {
-    mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ error: 'decision-review: timeoutMs must be an integer between 5000 and 600000' }), { status: 400, headers: { 'content-type': 'application/json' } }))
+    mock.method(
+      globalThis,
+      'fetch',
+      async () =>
+        new Response(
+          JSON.stringify({ error: 'decision-review: timeoutMs must be an integer between 5000 and 600000' }),
+          { status: 400, headers: { 'content-type': 'application/json' } },
+        ),
+    )
     field('timeout.label').props.onChange({ target: { value: '12.5' } })
     await button('save').props.onClick()
     shown('save.error')
