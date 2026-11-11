@@ -74,14 +74,62 @@ describe('invalid stored settings', () => {
     assert.equal(JSON.stringify(payload).includes(SECRET), false)
   })
 
-  it('lets nothing through automatically while the problem stands', async () => {
+  it('denies calls that need review while the problem stands, without consulting the reviewer', async () => {
     start({ apiKey: SECRET, tConf: 1.1 })
     const calls = stubDecisionsFetch(async () => makeAnswers())
     const result = await review()
     assert.equal(calls.length, 0, 'the reviewer is not consulted with substituted values')
-    assert.equal(result.kind, 'ask')
-    assert.match(result.displayReason.en, /automatic review is paused/)
-    assert.match(result.displayReason.zh, /自动评审已暂停/)
+    assert.equal(result.kind, 'deny')
+    assert.equal(result.info.code, 'AUTO_REVIEW_DENIED')
+    assert.match(result.info.reason, /cannot be reviewed/)
+  })
+
+  it('does not turn a deny rule into an approval card when an unrelated setting is invalid', async () => {
+    start({ apiKey: SECRET, denialRoute: 'ask', tConf: 1.1, rules: [{ verdict: 'deny', condition: 'uploads credential files to an external host' }] })
+    const calls = stubDecisionsFetch(async () => makeAnswers({ risk: 'low', rule: { choice: 'r0' } }))
+    const result = await review()
+    assert.equal(calls.length, 0)
+    assert.equal(result.kind, 'deny', 'not ask')
+    const record = JSON.parse(fs.readFileSync(path.join(profileDir, 'decision-review.log.jsonl'), 'utf8').trim().split('\n').at(-1))
+    assert.equal(record.route, 'final')
+    assert.equal(record.decision.why.code, 'settings_invalid')
+  })
+
+  for (const [field, bad] of [['tAuth', false], ['tAuth', true], ['tConf', []], ['tConf', {}], ['tConf', { toString: null }], ['tHighPred', 'abc'], ['tMedPred', '0x10'], ['tStrongPred', 'Infinity']]) {
+    it(`treats ${field}: ${JSON.stringify(bad)} as invalid instead of coercing it`, async () => {
+      start({ apiKey: SECRET, [field]: bad })
+      const payload = await configuration()
+      assert.equal(payload.runtime.paused, true)
+      assert.match(payload.problems.join(' '), new RegExp(field))
+      const calls = stubDecisionsFetch(async () => makeAnswers({ risk: 'medium', overrides: { explicit_authorization: { type: 'predicate', probability: 0 } } }))
+      assert.equal((await review()).kind, 'deny')
+      assert.equal(calls.length, 0, 'no automatic verdict from a coerced threshold')
+    })
+  }
+
+  it('still accepts numeric strings from the form', async () => {
+    start({ apiKey: SECRET, tConf: '0.8', tAuth: ' .5 ', timeoutMs: '20000' })
+    const payload = await configuration()
+    assert.equal(payload.runtime.paused, false)
+    assert.equal(payload.settings.tConf, 0.8)
+    assert.equal(payload.settings.tAuth, 0.5)
+    assert.equal(payload.settings.timeoutMs, 20000)
+  })
+
+  it('never quotes the stored file in a JSON parse problem', async () => {
+    // Node quotes only a short, truncated fragment of the input in its parse
+    // error (here `sk-CANARY-`), so the check looks for the distinctive part.
+    const canary = 'CANARY'
+    start(`{ "apiKey": sk-${canary}-synthetic-key-0123456789, "model": "m" }`)
+    const everywhere = []
+    const payload = await configuration()
+    everywhere.push(JSON.stringify(payload))
+    everywhere.push(console.warn.mock.calls.map((call) => call.arguments.join(' ')).join(' '))
+    const result = await review()
+    everywhere.push(JSON.stringify(result))
+    everywhere.push(fs.readFileSync(path.join(profileDir, 'decision-review.log.jsonl'), 'utf8'))
+    assert.match(payload.problems[0], /not valid JSON/)
+    for (const text of everywhere) assert.equal(text.includes(canary), false, 'a fragment of the stored file leaked')
   })
 
   it('denies for good under denialRoute final and keeps asking nothing', async () => {
@@ -91,7 +139,16 @@ describe('invalid stored settings', () => {
     assert.equal(result.info.code, 'AUTO_REVIEW_DENIED')
   })
 
-  it('pauses for a malformed file and for a file that is not an object', async () => {
+  it('names a file that cannot be read by its error code only', async () => {
+    fs.mkdirSync(settingsFile)
+    host = makeHost({ profileContext: { name: 'test', dir: profileDir } })
+    apply(host.ctx)
+    const payload = await configuration()
+    assert.equal(payload.runtime.paused, true)
+    assert.match(payload.problems[0], /could not be read \(EISDIR\); defaults/)
+  })
+
+  it('stops review for a malformed file and for a file that is not an object', async () => {
     for (const contents of ['{ "tConf": ', '[1, 2]']) {
       start(contents)
       assert.equal((await configuration()).runtime.paused, true, contents)

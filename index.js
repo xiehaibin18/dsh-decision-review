@@ -174,18 +174,32 @@ export function createReviewTrail(profileDirectory) {
 }
 
 /** Record one rejected stored value. A stored value that had to be replaced
- * pauses automatic review (see `apply`) until valid settings are saved, so the
- * problem list is what the configuration page shows. */
+ * stops review (every call that needs it is denied, see `apply`) until valid
+ * settings are saved, so the problem list is what the configuration page shows. */
 function reportStoredProblem(problems, message) {
   problems.push(message)
   console.warn(`[decision-review] ${message}`)
 }
 
+const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i
+
+/** The number a stored or submitted value stands for: a finite number or a
+ * plain decimal string (what the settings form sends). Anything else is NaN,
+ * so the coercions of `Number()` never decide a setting: `false` and `[]`
+ * would become 0, `true` would become 1, and a hostile object can make it
+ * throw. */
+function numericValue(value) {
+  if (typeof value === 'number') return value
+  if (typeof value === 'string' && DECIMAL_NUMBER.test(value.trim())) return Number(value)
+  return Number.NaN
+}
+
 /** Validate one numeric threshold into [0,1]. Strict mode (user saves) throws;
- * lenient mode (a stored file) falls back to the default and reports it. */
+ * lenient mode (a stored file) falls back to the default and reports it. The
+ * messages name the field only: stored values are never echoed. */
 function num(value, fallback, field, { strict, problems }) {
   if (value === undefined || value === null || value === '') return fallback
-  const n = Number(value)
+  const n = numericValue(value)
   if (Number.isFinite(n) && n >= 0 && n <= 1) return n
   if (strict) throw new Error(`decision-review: ${field} must be a number in [0,1]`)
   reportStoredProblem(problems, `stored ${field} is not a number in [0,1]; the default ${fallback} is shown`)
@@ -211,7 +225,7 @@ function ruleProblem(item, count, total) {
 /** Normalize the operator rule list. Strict mode (user saves) rejects a bad
  * rule so it can never vanish silently; lenient mode (reading a stored file)
  * drops it and reports it, so a hand-edit typo cannot keep the plugin from
- * loading while review stays paused until the list is saved again. */
+ * loading while review stays stopped until the list is saved again. */
 function normalizeRules(raw, strict, problems) {
   if (raw === undefined || raw === null) return []
   if (!Array.isArray(raw)) {
@@ -238,10 +252,10 @@ function normalizeRules(raw, strict, problems) {
 /** Validate the request timeout: an integer the Abort timer accepts. */
 function normalizeTimeout(value, strict, problems) {
   if (value === undefined || value === null || value === '') return SETTINGS_DEFAULTS.timeoutMs
-  const n = Number(value)
+  const n = numericValue(value)
   if (Number.isInteger(n) && n >= TIMEOUT_MIN_MS && n <= TIMEOUT_MAX_MS) return n
   if (strict) throw new Error(`decision-review: timeoutMs must be an integer between ${TIMEOUT_MIN_MS} and ${TIMEOUT_MAX_MS}`)
-  reportStoredProblem(problems, `stored timeoutMs ${String(value)} is not an integer between ${TIMEOUT_MIN_MS} and ${TIMEOUT_MAX_MS}; the default ${SETTINGS_DEFAULTS.timeoutMs} is shown`)
+  reportStoredProblem(problems, `stored timeoutMs is not an integer between ${TIMEOUT_MIN_MS} and ${TIMEOUT_MAX_MS}; the default ${SETTINGS_DEFAULTS.timeoutMs} is shown`)
   return SETTINGS_DEFAULTS.timeoutMs
 }
 
@@ -278,24 +292,27 @@ export function normalizeSettings(raw, { strict = false, problems = [] } = {}) {
 
 /** Read the stored settings without ever throwing: the configuration page must
  * stay reachable to repair a bad file. Whatever could not be used is listed in
- * `problems` (the plugin pauses automatic review while any exist), and
+ * `problems` (the plugin denies every call that needs review while any exist), and
  * `damaged` marks a file that could not be read as a settings object at all,
- * which the next save backs up before replacing. A missing file is normal. */
+ * which the next save backs up before replacing. A missing file is normal.
+ * Problem texts never quote the file: a parse error can carry a snippet of
+ * the input, and `problems` reaches the web page, the console, denial reasons
+ * and the review trail. */
 function loadSettings(settingsPath) {
   let text
   try {
     text = fs.readFileSync(settingsPath, 'utf8')
   } catch (error) {
     if (error && error.code === 'ENOENT') return { settings: normalizeSettings(undefined), problems: [], damaged: false }
-    const message = `the stored settings file could not be read (${error instanceof Error ? error.message : String(error)}); defaults are shown`
+    const message = `the stored settings file could not be read (${typeof error?.code === 'string' ? error.code : 'unknown error'}); defaults are shown`
     console.warn(`[decision-review] ${message}`)
     return { settings: normalizeSettings(undefined), problems: [message], damaged: true }
   }
   let raw
   try {
     raw = JSON.parse(text)
-  } catch (error) {
-    const message = `the stored settings file is not valid JSON (${error instanceof Error ? error.message : String(error)}); defaults are shown`
+  } catch {
+    const message = 'the stored settings file is not valid JSON; defaults are shown'
     console.warn(`[decision-review] ${message}`)
     return { settings: normalizeSettings(undefined), problems: [message], damaged: true }
   }
@@ -1214,7 +1231,6 @@ const WHY_TEXT = {
       ? `operator rule matched (${w.condition}), but whether you requested this could not be assessed`
       : `operator rule matched (${w.condition}), but you did not explicitly request this (${fmtScore(w.value)} < ${fmtScore(w.threshold)})`,
     session_denied: (w) => `the session reviewer denied this call as ${w.risk} risk${w.reason ? `: ${w.reason}` : ''}`,
-    settings_invalid: (w) => `the stored settings are invalid, so automatic review is paused until valid settings are saved (${w.problems[0]})`,
   },
   zh: {
     refused_class: () => '评审员拒绝给出风险分类',
@@ -1233,7 +1249,6 @@ const WHY_TEXT = {
       ? `命中操作者规则（${w.condition}），但无法评估你是否明确要求过此操作`
       : `命中操作者规则（${w.condition}），但未见你明确要求此操作（${fmtScore(w.value)} < ${fmtScore(w.threshold)}）`,
     session_denied: (w) => `会话评审员判定为${w.risk === 'high' ? '高' : '中'}风险并拒绝${w.reason ? `：${w.reason}` : ''}`,
-    settings_invalid: (w) => `已保存的配置无效，自动评审已暂停，保存有效配置后恢复（${w.problems[0]}）`,
   },
 }
 
@@ -1298,14 +1313,16 @@ function askUser(exec, decision) {
   }
 }
 
-/** The verdict used while the stored settings are invalid: nothing is allowed
- * automatically, and each call goes through the normal denial routing (a card
- * in ask sessions, a final denial under the never policy or denialRoute final). */
+/** The verdict used while the stored settings are invalid. The plugin cannot
+ * tell whether the call would have matched a deny rule, so it is closed with a
+ * final denial (`final`) in every session: never an approval card the user
+ * could accept. */
 function settingsInvalidDecision(problems) {
   return {
     risk: 'medium',
     decision: 'deny',
-    reason: `stored settings are invalid, automatic review is paused: ${problems.join('; ')}`,
+    final: true,
+    reason: `stored settings are invalid, so this call cannot be reviewed; fix them on the plugin page: ${problems.join('; ')}`,
     why: { code: 'settings_invalid', problems },
   }
 }
@@ -1443,7 +1460,7 @@ export function apply(ctx) {
   const trail = createReviewTrail(profileDirectory)
   const loaded = loadSettings(settingsPath)
   // `problems` lists stored values that had to be replaced; while it is not
-  // empty, automatic review is paused (see the pre-execute listener).
+  // empty, review is stopped and calls that need it are denied (see the pre-execute listener).
   const holder = { settings: loaded.settings, problems: loaded.problems, damaged: loaded.damaged }
   let accepting = true
   const active = new Set()
@@ -1545,8 +1562,9 @@ export function apply(ctx) {
           shown.set(snapshot.pending.key, snapshot.pending.schema)
           return next()
         }
-        // Invalid stored settings pause automatic review: nothing is allowed
-        // on the strength of values that were replaced by defaults.
+        // Invalid stored settings stop review: nothing is allowed on the
+        // strength of values that were replaced by defaults, and nothing can be
+        // sent to the user either (see settingsInvalidDecision).
         const review = problems.length > 0
           ? { ok: true, value: { decision: settingsInvalidDecision(problems), telemetry: { ms: 0, answers: null, usage: null } } }
           : await (settings.engine === 'session'
@@ -1571,11 +1589,12 @@ export function apply(ctx) {
           // Denial routing: 'final' always closes here (reason feeds back to the
           // model, which may adapt); 'ask' defers to the session approval policy
           // — ask sessions prompt the user, never sessions final-deny. A matched
-          // operator deny rule (`hardDeny`) always closes here, whatever other
-          // finding supplied the reason.
+          // operator deny rule (`hardDeny`) and a decision made without trusted
+          // settings (`final`) always close here, whatever else was found.
           const routeFinal = settings.denialRoute === 'final'
             || ctx.approval.overrideOf(agent.session) === 'never'
             || decision.hardDeny !== undefined
+            || decision.final === true
           if (routeFinal) {
             record('final')
             return denied(exec, decision.reason)
@@ -1676,7 +1695,7 @@ export function apply(ctx) {
   })
 
   if (holder.problems.length > 0) {
-    console.warn(`[decision-review] automatic review is PAUSED until valid settings are saved from the plugin page: ${holder.problems.join('; ')}`)
+    console.warn(`[decision-review] review is STOPPED and calls that need it are denied until valid settings are saved from the plugin page: ${holder.problems.join('; ')}`)
   }
   console.info(`[decision-review] ready: engine=${holder.settings.engine} endpoint=${holder.settings.endpoint}`)
 }

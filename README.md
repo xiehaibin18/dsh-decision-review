@@ -20,7 +20,9 @@ Settings live in `<profile>/decision-review.settings.json` (plaintext, mode `060
 
 Saving is strict: a malformed rule line, an out-of-range threshold or `timeoutMs`, or an oversized request is rejected with an explanation and nothing is written.
 
-Loading a hand-edited file never stops the plugin from starting, so the configuration page stays reachable to repair it. A value that cannot be used (a threshold outside [0,1], a bad `timeoutMs`, a rule that fails validation, a file that is not valid JSON) falls back to its default, is listed in a notice on the page and in `GET /config` (`problems`), and **pauses automatic review**: no call is allowed on the strength of substituted values, each one goes through the normal denial routing instead (a card in ask sessions, a final denial under the `never` policy or `denialRoute: final`). Saving valid settings from the page clears the notice and resumes review. If the file was not readable as a settings object, the next save first copies it to `decision-review.settings.json.invalid-<timestamp>`, so the stored key is not lost. Hand edits take effect after a plugin reload.
+Thresholds and `timeoutMs` accept only a finite number or a plain decimal string (what the form sends); other types (`false`, `true`, `[]`, objects) are rejected rather than coerced.
+
+Loading a hand-edited file never stops the plugin from starting, so the configuration page stays reachable to repair it. A value that cannot be used (a threshold outside [0,1] or of the wrong type, a bad `timeoutMs`, a rule that fails validation, a file that is not valid JSON) falls back to its default, is listed in a notice on the page and in `GET /config` (`problems`), and **stops review**. The plugin can no longer tell whether a call would have matched a deny rule, so every call that would need review is denied outright, in every session and whatever `denialRoute` says; it never becomes an approval card. Read-only tools still bypass review as usual. Saving valid settings from the page clears the notice and resumes review. Problem texts name the setting but never quote the file or the rejected value, because they reach the web page, the console, denial reasons and the review trail. If the file was not readable as a settings object, the next save first copies it to `decision-review.settings.json.invalid-<timestamp>`, so the stored key is not lost. Hand edits take effect after a plugin reload.
 
 ### HTTP API
 
@@ -28,7 +30,7 @@ The detail page talks to the host's authenticated Connection service (`connectio
 
 | route | purpose |
 |---|---|
-| `GET /api/decision-review/config` | current settings; the API key is never returned, only `hasApiKey`; `problems` lists stored values that were replaced (review is paused while it is not empty) |
+| `GET /api/decision-review/config` | current settings; the API key is never returned, only `hasApiKey`; `problems` lists stored values that were replaced (review is stopped while it is not empty) |
 | `POST /api/decision-review/save` | `{settings}` — validate strictly, merge, persist. The key is write-only: an absent or empty `apiKey` keeps the stored one, a non-empty one replaces it, `clearApiKey: true` removes it |
 | `GET /api/decision-review/stats?session=<id>` | per-session approval counts for the dock pill |
 | `POST /api/decision-review/test` | smoke test; optional `{scenarios: [...]}` of distinct built-in names (benign / exfiltration / plugin install), runs against the saved settings only |
