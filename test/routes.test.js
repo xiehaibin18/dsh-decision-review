@@ -85,6 +85,33 @@ describe('Connection routes', () => {
     assert.equal(fs.readFileSync(settingsFile, 'utf8'), before)
   })
 
+  it('rejects explicit invalid endpoints and model values without changing the saved route', async () => {
+    const before = fs.readFileSync(settingsFile, 'utf8')
+    const invalid = {
+      endpoint: [null, false, 12, [], {}, ' ', '/v1/decisions', 'https:', 'http:///example.test', 'ftp://example.test', 'https://user:password@example.test'],
+      model: [null, false, 12, [], {}, ' '],
+    }
+    for (const [field, values] of Object.entries(invalid)) {
+      for (const value of values) {
+        const response = await call('save', jsonRequest(`${BASE}/save`, { settings: { [field]: value } }))
+        assert.equal(response.status, 400, `${field}: ${JSON.stringify(value)}`)
+        assert.match((await response.json()).error, new RegExp(field))
+      }
+    }
+    assert.equal(fs.readFileSync(settingsFile, 'utf8'), before)
+  })
+
+  it('preserves the exact condition text in a save and a subsequent config read', async () => {
+    const condition = '  deploys to production\n\n  with affected services listed\n '
+    const rules = [{ condition, verdict: 'allow_if_requested' }]
+    const response = await call('save', jsonRequest(`${BASE}/save`, { settings: { rules } }))
+    assert.equal(response.status, 200)
+    assert.deepEqual((await response.json()).settings.rules, rules)
+    assert.deepEqual(stored().rules, rules)
+    const payload = await (await call('config', new Request(`${BASE}/config`))).json()
+    assert.deepEqual(payload.settings.rules, rules)
+  })
+
   it('requires a JSON body on writes', async () => {
     const plain = new Request(`${BASE}/save`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ settings: { model: 'x' } }) })
     assert.equal((await call('save', plain)).status, 415)
@@ -136,6 +163,17 @@ describe('Connection routes', () => {
       const payload = await (await call('test', jsonRequest(`${BASE}/test`, { scenarios: ['allow'] }))).json()
       assert.equal(payload.results[0].ok, false)
       assert.match(payload.results[0].error, /HTTP 401/)
+    })
+
+    it('reports a denial basis without inviting the reader to approve the smoke-test action', async () => {
+      stubDecisionsFetch(async () => makeAnswers({ risk: 'high' }))
+      const payload = await (await call('test', jsonRequest(`${BASE}/test`, { scenarios: ['exfil'] }))).json()
+      const { composed } = payload.results[0]
+      assert.equal(composed.decision, 'deny')
+      assert.match(composed.display.en, /high risk/)
+      assert.match(composed.display.zh, /高风险/)
+      assert.doesNotMatch(composed.display.en, /asks you to confirm/)
+      assert.doesNotMatch(composed.display.zh, /请你确认/)
     })
   })
 })
