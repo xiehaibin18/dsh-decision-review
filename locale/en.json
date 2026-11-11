@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Decision Review",
+    "description": "Per-tool-call Auto review with a pluggable engine: OpenAI Decisions API (typed predicates + deterministic composition) or the official session-model mirror review."
+  }
+}

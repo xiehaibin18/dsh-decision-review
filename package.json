@@ -1,0 +1,25 @@
+{
+  "name": "@local/decision-review",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Per-tool-call Auto review with a pluggable engine: OpenAI Decisions API (typed predicates + deterministic composition) or the official session-model mirror review.",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": ["index.js", "client.js", "cordis.patch.yml", "locale/en.json", "locale/zh.json", "icon.svg", "LICENSE.upstream"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation"]
+    }
+  }
+}
