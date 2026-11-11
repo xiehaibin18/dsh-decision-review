@@ -407,7 +407,7 @@ describe('configuration panel', () => {
       }
       assert.match(renderer.text(), /Rules: 0\/20 · Condition characters: 0\/2000/)
       assert.match(renderer.text(), /tConf — Minimum classification confidence/)
-      assert.match(renderer.text(), /tHighPred — Data exfiltration cutoff for final denial/)
+      assert.match(renderer.text(), /tHighPred — Data exfiltration threshold for high-risk classification/)
       assert.match(renderer.text(), /tMedPred — Weak signal threshold for medium risk/)
       assert.match(renderer.text(), /tStrongPred — Strong signal threshold for medium risk/)
       assert.match(renderer.text(), /tAuth — Authorization threshold for allowing medium risk/)
@@ -417,7 +417,7 @@ describe('configuration panel', () => {
       mount()
       assert.match(renderer.text(), /规则：0\/20 条 · 条件总长：0\/2000 个字符/)
       assert.match(renderer.text(), /tConf — 分类置信度下限/)
-      assert.match(renderer.text(), /tHighPred — 数据外传直接拒绝阈值/)
+      assert.match(renderer.text(), /tHighPred — 数据外传高风险判定阈值/)
       assert.match(renderer.text(), /tMedPred — 中风险弱信号阈值/)
       assert.match(renderer.text(), /tStrongPred — 中风险强信号阈值/)
       assert.match(renderer.text(), /tAuth — 中风险放行的授权阈值/)

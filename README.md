@@ -26,6 +26,8 @@ Saving is strict: an invalid endpoint or model, an invalid rule, an out-of-range
 
 Thresholds and `timeoutMs` accept only a finite number or a plain decimal string (what the form sends); other types (`false`, `true`, `[]`, objects) are rejected rather than coerced.
 
+Reaching `tHighPred` produces a high-risk reviewer denial, not necessarily a final denial. It still follows `denialRoute` and the session approval policy; a matched operator `deny` rule forces final denial regardless of that routing.
+
 `engine` and `denialRoute` use their defaults when omitted. An unrecognized value is rejected on save and stops review when found in stored settings, so a typo cannot switch the reviewer, change the data sent for review, or loosen denial routing.
 
 Loading a hand-edited file never stops the plugin from starting, so the configuration page stays reachable to repair it. A value that cannot be used (a threshold outside [0,1] or of the wrong type, a bad `timeoutMs`, a rule that fails validation, a file that is not valid JSON) is replaced or dropped and listed in a notice on the page and in `GET /config` (`problems`), and **stops review**. The plugin can no longer tell whether a call would have matched a deny rule, so every call that would need review is denied outright, in every session and whatever `denialRoute` says; it never becomes an approval card. Read-only tools still bypass review as usual. Saving valid settings from the page clears the notice and resumes review. Problem texts name the setting but never quote the file or the rejected value, because they reach the web page, the console, denial reasons and the review trail. If the file was not readable as a settings object, the next save first copies it to `decision-review.settings.json.invalid-<timestamp>`, so the stored key is not lost. Hand edits take effect after a plugin reload.
@@ -60,7 +62,7 @@ The bundle also observes the `approval/request` waterfall without answering, app
 ## Session and lifecycle behavior
 
 - Only the `auto` permission preset is gated; the outer `run_code` transport is excluded; PTC inner calls are reviewed.
-- Truly new main sessions default to Auto review. Restored or seeded sessions, existing permission choices, and delegated children retain their recorded permissions. An empty resumed session is still a restore; absence of user messages does not establish that it is new.
+- Truly new main sessions default to Auto review. Restored or seeded sessions, recorded permission choices (including setup choices), and delegated children retain their recorded permissions. An empty resumed session is still a restore; absence of user messages does not establish that it is new. Same-value setup selections have a host-contract limitation described below.
 - Reviewer denials under the `ask` approval policy ask the user (localized display reason, raw engine reason preserved); under `never` they are final. Reviewer failures never execute (`AUTO_REVIEW_FAILED`).
 - Unloading migrates live Auto sessions to `danger-full-access`; app shutdown preserves selection.
 
@@ -77,9 +79,11 @@ The bundle also observes the `approval/request` waterfall without answering, app
 
 The tested host API target is `dsh-v0.2.2-rc.1`. Its Auto preset uses full access with `ask`; a delegated child may retain `never`.
 
+In rc.1, `permissionPresets.set()` appends no event when the selected preset and its permission values already match the effective defaults. For example, setup can explicitly select `workspace-write` on an otherwise empty new main session and still leave `session.seq === 0`. The plugin cannot distinguish this unrecorded same-value selection from no selection, so the session can subsequently default to Auto. This is a documented host-contract limitation; this plugin delivery does not modify the host or work around it.
+
 The plugin supplies localized presentation metadata as the optional second argument to `permissionPresets.registerAuto(admit, { description, confirmationDescription })`. The companion host change exposes this metadata in the permission catalog and uses it in both Auto pickers. The confirmation explains that Decisions sends review input to a separately configured endpoint/model, while Session uses the session route. The official reviewer retains its existing description when it supplies no metadata.
 
-An unpatched rc.1 host ignores the extra argument and still displays its built-in same-model confirmation; updating the plugin alone cannot correct that host-owned dialog. Apply the companion source change and rebuild the host before claiming the confirmation text is corrected in an installation.
+An unpatched rc.1 host ignores the extra argument and still displays its built-in same-model confirmation; updating the plugin alone cannot correct that host-owned dialog. Host support is outside this plugin delivery, so the metadata must not be treated as a correction to the confirmation text in an unpatched installation.
 
 ## Testing
 
