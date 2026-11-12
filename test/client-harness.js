@@ -27,6 +27,8 @@ export function createClient(fetch) {
   const unregisterLocale = mock()
 
   window.fetch = fetch
+  // The host route adapter constructs Bun Requests from the browser-side fetch options.
+  window.AbortController = globalThis.AbortController
   // jsdom implements intervals with its own rescheduling. Use Bun's clock for the pill instead.
   window.setInterval = (...args) => globalThis.setInterval(...args)
   window.clearInterval = (id) => globalThis.clearInterval(id)

@@ -1,0 +1,14 @@
+{
+  "status": "passed",
+  "date": "2026-11-12",
+  "host": "DSH 0.2.2-rc.1 c59d10a",
+  "revision": "963452075e9d7e2a47a482f297143af5ed4f76c0",
+  "checks": [
+    "Packed classic ModuleLoader client mounts the shared panel and stylesheet in DSH 0.2.2-rc.1",
+    "Authenticated browser save and remount preserve Follow session and exact multiline rule content",
+    "Decisions controls and dirty/saved smoke-test gating work through the real host adapter; no smoke request sent"
+  ],
+  "exceptions": [],
+  "console": [],
+  "request_origins": "localhost HTTP and inline data URLs only; no smoke or model request"
+}

@@ -8,9 +8,11 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PluginConfigViewProps } from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { createElement as h } from 'react'
+import { createReviewApi } from './api.js'
 import { MESSAGES, NS, type ResolveText, type Translate } from './messages.js'
 import { ConfigPanel } from './panel.js'
 import { ApprovalStatsPill } from './stats-pill.js'
+import css from './styles.css' with { type: 'text' }
 import { NOTE } from './styles.js'
 
 export const inject = ['slots', 'locale']
@@ -18,13 +20,14 @@ export const inject = ['slots', 'locale']
 export function apply(ctx: Context): () => void {
   const disposeLocale = ctx.locale.register(NS, MESSAGES)
   const resolveText: ResolveText = (text) => ctx.locale.resolveText(text)
+  const api = createReviewApi()
 
   ctx.slots.inject('plugins.row.config', function () {
     return ctx.slots.register(
       { name: 'plugins.row.config', key: '@local/decision-review#decision-review', locale: NS },
       function RowConfig({ t, view }: PluginConfigViewProps & { t: Translate }) {
         if (view === 'summary') return h('span', { style: NOTE }, t('panel.desc'))
-        return h(ConfigPanel, { t, resolveText })
+        return h(ConfigPanel, { t, resolveText, api })
       },
     )
   })
@@ -32,9 +35,18 @@ export function apply(ctx: Context): () => void {
   ctx.slots.inject('conversation.composer.dock', function () {
     return ctx.slots.register(
       { name: 'conversation.composer.dock', id: 'decision-review-approvals', order: 2, locale: NS },
-      ApprovalStatsPill,
+      function ComposerStats({ t, sessionId }) {
+        return h(ApprovalStatsPill, { t, sessionId, api })
+      },
     )
   })
 
-  return disposeLocale
+  const style = document.createElement('style')
+  style.setAttribute('data-decision-review', '')
+  style.textContent = css
+  document.head.append(style)
+  return () => {
+    style.remove()
+    disposeLocale()
+  }
 }

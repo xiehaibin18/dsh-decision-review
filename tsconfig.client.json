@@ -1,6 +1,8 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    "allowArbitraryExtensions": true,
+    "jsx": "react",
     "types": ["react"],
     "lib": ["ES2024", "DOM", "DOM.Iterable", "ESNext.Disposable"],
     "preserveSymlinks": true

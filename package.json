@@ -6,18 +6,21 @@
   "description": "Per-tool-call Auto review with a pluggable engine: OpenAI Decisions API (typed predicates + deterministic composition) or the official session-model mirror review.",
   "scripts": {
     "build": "bun run toolchain:check && bun scripts/build.ts",
-    "typecheck": "bun run toolchain:check && bun check --no-script -p tsconfig.server.json && bun check --no-script -p tsconfig.client.json && bun check --no-script -p tsconfig.scripts.json",
-    "lint": "bun run toolchain:check && bun lint --no-script --max-warnings=0 src scripts test",
-    "fmt": "bun run toolchain:check && bun fmt --no-script --no-editorconfig src scripts test assets package.json tsconfig*.json bunfig.toml .github",
-    "fmt:check": "bun run toolchain:check && bun fmt --no-script --check --no-editorconfig src scripts test assets package.json tsconfig*.json bunfig.toml .github",
-    "test": "bun run build && bun --no-env-file test --isolate",
-    "test:ci": "bun run build && mkdir -p artifacts/test && bun --no-env-file test --isolate --parallel=2 --randomize --seed=963452075 --coverage --reporter=junit --reporter-outfile=artifacts/test/junit.xml",
+    "typecheck": "bun run toolchain:check && bun check --no-script -p tsconfig.server.json && bun check --no-script -p tsconfig.client.json && bun check --no-script -p tsconfig.scripts.json && bun check --no-script -p tsconfig.preview.json",
+    "lint": "bun run toolchain:check && bun lint --no-script --max-warnings=0 src scripts test preview",
+    "fmt": "bun run toolchain:check && bun fmt --no-script --no-editorconfig src scripts test preview assets package.json tsconfig*.json bunfig.toml .github",
+    "fmt:check": "bun run toolchain:check && bun fmt --no-script --check --no-editorconfig src scripts test preview assets package.json tsconfig*.json bunfig.toml .github",
+    "test": "bun run build && bun --no-env-file test --isolate ./test ./preview/service.test.ts",
+    "test:ci": "bun run build && mkdir -p artifacts/test && bun --no-env-file test --isolate --parallel=2 --randomize --seed=963452075 --coverage --reporter=junit --reporter-outfile=artifacts/test/junit.xml ./test ./preview/service.test.ts",
     "check": "bun run typecheck && bun run lint && bun run fmt:check && bun run test",
     "prepack": "bun run build",
     "pack": "bun pm pack --ignore-scripts --destination artifacts",
     "toolchain:check": "bun scripts/check-toolchain.ts",
     "verify:package": "bun run toolchain:check && bun scripts/verify-package.ts",
-    "verify:host": "python3 scripts/verify-host.py"
+    "verify:host": "python3 scripts/verify-host.py",
+    "dev": "bun run toolchain:check && bun --no-env-file preview/server.ts",
+    "test:preview": "bun run toolchain:check && bun --no-env-file test --isolate ./preview/service.test.ts",
+    "verify:preview": "bun run toolchain:check && bun --no-env-file scripts/verify-preview.mjs"
   },
   "exports": {
     ".": "./dist/index.js",
@@ -92,13 +95,18 @@
     "@deepseek-ai/dsh-working-directory": "0.2.2-rc.1",
     "@deepseek-ai/dsh-workspace": "0.2.2-rc.1",
     "@shikijs/langs": "4.4.3",
+    "@types/bun": "1.4.4",
     "@types/js-yaml": "4.0.9",
     "@types/mdast": "4.0.4",
     "@types/node": "24.19.2",
     "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
     "jsdom": "29.1.1",
     "lexical": "0.49.0",
     "react": "18.3.1",
     "react-dom": "18.3.1"
+  },
+  "patchedDependencies": {
+    "bun-types@1.4.4": "patches/bun-types@1.4.4.patch"
   }
 }

@@ -1,0 +1,315 @@
+import assert from 'node:assert/strict'
+import { readFile, writeFile, mkdir } from 'node:fs/promises'
+const args = process.argv.slice(2).filter((argument) => argument !== '--')
+const target = new URL(args.find((argument) => !argument.startsWith('--')) ?? 'http://127.0.0.1:4317')
+if (target.protocol !== 'http:' || !['localhost', '127.0.0.1'].includes(target.hostname))
+  throw new Error('Browser acceptance requires a localhost HTTP preview URL')
+const origin = target.origin
+const checkHmr = process.argv.includes('--hmr')
+let status = 'failed'
+const evidenceDirectory = 'artifacts/browser'
+const events = []
+const requests = []
+const checks = []
+const errors = []
+let navigations = 0
+const view = new Bun.WebView({
+  width: 1280,
+  height: 1000,
+  backend: { type: 'chrome', url: false },
+  console: (type, ...args) => events.push({ type, args }),
+})
+await view.navigate('about:blank')
+await view.cdp('Network.enable')
+await view.cdp('Runtime.enable')
+view.addEventListener('Network.requestWillBeSent', (event) =>
+  requests.push({ url: event.data.request.url, method: event.data.request.method }),
+)
+view.addEventListener('Network.responseReceived', (event) => {
+  const request = requests.findLast((request) => request.url === event.data.response.url)
+  if (request) request.status = event.data.response.status
+})
+view.addEventListener('Runtime.exceptionThrown', (event) => errors.push(event.data))
+view.onNavigated = () => navigations++
+await view.navigate(origin)
+const body = () => view.evaluate('document.body.innerText')
+async function until(expression, timeout = 8000) {
+  const deadline = Date.now() + timeout
+  do {
+    if (await view.evaluate(expression)) return
+    await Bun.sleep(60)
+  } while (Date.now() < deadline)
+  throw new Error(`Browser condition timed out: ${expression}
+${await body()}`)
+}
+function textIncludes(text) {
+  return `document.body.innerText.includes(${JSON.stringify(text)})`
+}
+async function field(label) {
+  return await view.evaluate(`(() => {
+    const label = [...document.querySelectorAll('label')].find(element => element.textContent.startsWith(${JSON.stringify(label)}));
+    const control = label?.querySelector('input,select,textarea');
+    if (!control) throw new Error('Missing control: '+${JSON.stringify(label)});
+    document.querySelector('[data-evidence-control]')?.removeAttribute('data-evidence-control');
+    control.setAttribute('data-evidence-control','');
+    return '[data-evidence-control]';
+  })()`)
+}
+async function value(label) {
+  const selector = await field(label)
+  return await view.evaluate(`document.querySelector(${JSON.stringify(selector)}).value`)
+}
+async function fill(label, value) {
+  const selector = await field(label)
+  await view.scrollTo(selector)
+  await view.click(selector)
+  await view.evaluate(`document.querySelector(${JSON.stringify(selector)}).select()`)
+  await view.type(value)
+  assert.equal(await view.evaluate(`document.querySelector(${JSON.stringify(selector)}).value`), value)
+}
+async function choose(label, value) {
+  const selector = await field(label)
+  await view.evaluate(
+    `(() => { const control = document.querySelector(${JSON.stringify(selector)}); if (![...control.options].some(option=>option.value===${JSON.stringify(value)})) throw new Error('Missing option'); control.value=${JSON.stringify(value)}; control.dispatchEvent(new Event('change',{bubbles:true})); })()`,
+  )
+  await Bun.sleep(80)
+}
+async function click(text) {
+  const selector = await view.evaluate(`(() => {
+    const button=[...document.querySelectorAll('button')].find(button=>button.textContent.trim().replace(/^\\+ /,'')===${JSON.stringify(text)});
+    if (!button) throw new Error('Missing button: '+${JSON.stringify(text)});
+    document.querySelector('[data-evidence-button]')?.removeAttribute('data-evidence-button');
+    button.setAttribute('data-evidence-button',''); return '[data-evidence-button]';
+  })()`)
+  await view.scrollTo(selector)
+  await view.click(selector)
+}
+async function disabled(text) {
+  return await view.evaluate(
+    `[...document.querySelectorAll('button')].find(button=>button.textContent.trim()===${JSON.stringify(text)})?.disabled`,
+  )
+}
+async function scene(id, wait = true) {
+  await choose('预览场景', id)
+  if (wait) await until(`!!document.querySelector('.decision-review-panel')`)
+}
+async function capture(name) {
+  const metrics = await view.evaluate(
+    '({ width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth, surfaceWidth: document.querySelector(".preview-surface").getBoundingClientRect().width })',
+  )
+  assert.equal(metrics.scrollWidth, metrics.width, `Horizontal overflow in ${name}`)
+  const screenshot = await view.cdp('Page.captureScreenshot', {
+    format: 'png',
+    captureBeyondViewport: true,
+    fromSurface: true,
+  })
+  await Bun.write(`${evidenceDirectory}/${name}.png`, Buffer.from(screenshot.data, 'base64'))
+  return metrics
+}
+function passed(name, details) {
+  checks.push({ name, details })
+  console.log('PASS', name, details ?? '')
+}
+try {
+  await until(textIncludes('自动评审 12 次'))
+  assert.match(await body(), /授权评审/)
+  await click('运行冒烟测试（3 个场景）')
+  await until('document.querySelectorAll("tbody tr").length===3')
+  passed('Chinese/light/wide Decisions and three synthetic smoke results', await capture('zh-light-wide-results'))
+  await fill('Decisions 模型', 'unsaved-preview-draft')
+  assert.equal(await disabled('运行冒烟测试（3 个场景）'), true)
+  await choose('界面语言', 'en')
+  await choose('主题', 'dark')
+  await choose('预览宽度', 'narrow')
+  await view.resize(390, 844)
+  assert.equal(await value('Decisions model'), 'unsaved-preview-draft')
+  assert.match(await body(), /Save your changes first/)
+  passed('Language/theme/width preserve unsaved draft; real narrow viewport', await capture('en-dark-narrow-dirty'))
+  await click('Save')
+  await until(textIncludes('Settings saved.'))
+  await click('重新加载已保存配置')
+  await until(
+    `document.querySelector('.decision-review-panel') && [...document.querySelectorAll('input')].some(input=>input.value==='unsaved-preview-draft')`,
+  )
+  passed('Successful save and HTTP reload persist normalized values')
+  await scene('session')
+  assert.equal(await value('Review engine'), 'session')
+  assert.equal(await disabled('Run smoke test (3 scenarios)'), true)
+  assert.doesNotMatch(await body(), /Decisions API URL/)
+  await choose('主题', 'light')
+  passed('English/light/narrow Follow session', await capture('en-light-session'))
+  await choose('界面语言', 'zh')
+  await view.resize(1280, 1000)
+  await choose('预览宽度', 'wide')
+  await scene('load-error', false)
+  await until(textIncludes('无法加载设置。'))
+  await click('恢复接口')
+  await until('!!document.querySelector(".decision-review-panel")')
+  passed('Config HTTP 503 recovers by restoring endpoint and reloading')
+  await scene('save-error')
+  await fill('Decisions 模型', 'save-recovery-draft')
+  await click('保存')
+  await until(textIncludes('无法保存设置。'))
+  assert.equal(await value('Decisions 模型'), 'save-recovery-draft')
+  await capture('zh-save-failed')
+  await click('恢复接口')
+  assert.equal(await value('Decisions 模型'), 'save-recovery-draft')
+  await click('保存')
+  await until(textIncludes('设置已保存。'))
+  passed('Save HTTP 503 preserves draft; recovery and retry succeed')
+  await scene('multiline')
+  const multiline = `  第一行
+
+  npm test -- --runInBand
+last line | 保留空格  
+`
+  await fill('匹配条件', multiline)
+  await click('保存')
+  await until(textIncludes('设置已保存。'))
+  await click('重新加载已保存配置')
+  await until('!!document.querySelector("textarea")')
+  assert.equal(await value('匹配条件'), multiline)
+  await click('添加规则')
+  await click('保存')
+  await until(textIncludes('请修正有提示的规则后再保存。'))
+  await capture('zh-multiline-validation')
+  passed('Multiline text survives save/reload byte-for-byte; blank rule blocks save', { multiline })
+  await scene('invalid')
+  assert.equal(await value('评审引擎'), 'session')
+  assert.equal(await value('Decisions API 地址'), '')
+  assert.equal(await value('Decisions 模型'), '')
+  assert.match(await body(), /已保存的设置无效/)
+  await click('保存')
+  await until(textIncludes('无法保存设置。'))
+  await fill('Decisions API 地址', 'https://fixed.example.invalid/decisions')
+  await fill('Decisions 模型', 'repaired-synthetic-reviewer')
+  await click('保存')
+  await until(textIncludes('设置已保存。'))
+  assert.doesNotMatch(await body(), /已保存的设置无效/)
+  assert.equal(await value('评审引擎'), 'session')
+  passed('Invalid stored route/model require real validation and repair while keeping session engine')
+  await scene('slow', false)
+  await until(textIncludes('正在加载设置…'))
+  await scene('session')
+  await Bun.sleep(2100)
+  assert.equal(await value('评审引擎'), 'session')
+  passed('Switch during delayed load cancels old scene without stale form')
+  await scene('slow')
+  await fill('Decisions 模型', 'submitted-before-edit')
+  await click('保存')
+  await until(textIncludes('正在保存…'))
+  assert.equal(await disabled('运行冒烟测试（3 个场景）'), true)
+  await capture('zh-saving')
+  await fill('Decisions 模型', 'edited-during-save')
+  await until(`![...document.querySelectorAll('button')].some(button=>button.textContent==='正在保存…')`)
+  assert.equal(await value('Decisions 模型'), 'edited-during-save')
+  assert.match(await body(), /请先保存修改/)
+  await click('重新加载已保存配置')
+  await until(
+    `document.querySelector('.decision-review-panel') && [...document.querySelectorAll('input')].some(input=>input.value==='submitted-before-edit')`,
+  )
+  passed('Saving state is visible; edits made during save are not overwritten')
+  await click('运行冒烟测试（3 个场景）')
+  await until(textIncludes('正在测试…'))
+  await scene('session')
+  await Bun.sleep(2100)
+  assert.equal(await view.evaluate('document.querySelectorAll("tbody tr").length'), 0)
+  passed('Switch during delayed smoke cancels old results')
+  await scene('test-error')
+  await click('运行冒烟测试（3 个场景）')
+  await until(textIncludes('无法运行冒烟测试。'))
+  await click('恢复接口')
+  await click('运行冒烟测试（3 个场景）')
+  await until('document.querySelectorAll("tbody tr").length===3')
+  await scene('test-mixed')
+  await click('运行冒烟测试（3 个场景）')
+  await until('document.querySelectorAll("tbody tr").length===3')
+  assert.match(await body(), /评审未能完成此场景/)
+  passed('Test request error recovers; mixed synthetic row error renders')
+  await scene('stats-error')
+  await Bun.sleep(250)
+  assert.doesNotMatch(await body(), /自动评审 12 次/)
+  await click('恢复接口')
+  await until(textIncludes('自动评审 12 次'), 6500)
+  await scene('stats-empty')
+  await Bun.sleep(250)
+  assert.doesNotMatch(await body(), /自动评审 12 次/)
+  passed('Stats failure recovers on polling; zero-review fixture hides pill')
+  if (checkHmr) {
+    await scene('decisions')
+    await fill('Decisions 模型', 'hot-refresh-unsaved')
+    const before = await view.evaluate('({timeOrigin:performance.timeOrigin})')
+    const panelPath = 'src/client/panel.tsx'
+    const cssPath = 'src/client/styles.css'
+    const htmlPath = 'preview/index.html'
+    const panel = await readFile(panelPath, 'utf8')
+    const css = await readFile(cssPath, 'utf8')
+    const html = await readFile(htmlPath, 'utf8')
+    const changedPanel = panel.replace("{t('panel.title')}", "{t('panel.title')}<span> · TSX HMR</span>")
+    const changedCss = css.replace(
+      '.decision-review-panel {',
+      `.decision-review-panel {
+  outline: 3px solid rgb(231, 101, 27);`,
+    )
+    const changedHtml = html.replace('开发预览</title>', '开发预览 HTML HMR</title>')
+    assert.notEqual(panel, changedPanel)
+    const beforeNavigations = navigations
+    try {
+      await writeFile(panelPath, changedPanel)
+      await until(textIncludes('TSX HMR'))
+      assert.equal(await value('Decisions 模型'), 'hot-refresh-unsaved')
+      assert.equal(await view.evaluate('performance.timeOrigin'), before.timeOrigin)
+      const tsxNavigations = navigations
+      await writeFile(cssPath, changedCss)
+      await until(
+        `getComputedStyle(document.querySelector('.decision-review-panel')).outlineColor==='rgb(231, 101, 27)'`,
+      )
+      assert.equal(await value('Decisions 模型'), 'hot-refresh-unsaved')
+      assert.equal(navigations, beforeNavigations)
+      await capture('shared-tsx-css-hmr')
+      passed('Actual shared TSX and CSS HMR retain draft and do not navigate', {
+        beforeNavigations,
+        tsxNavigations,
+        cssNavigations: navigations,
+        timeOrigin: before.timeOrigin,
+      })
+      await writeFile(panelPath, panel)
+      await writeFile(cssPath, css)
+      await until(`!${textIncludes('TSX HMR')}`)
+      await writeFile(htmlPath, changedHtml)
+      await until('document.title.includes("HTML HMR")')
+      await until('!!document.querySelector(".decision-review-panel")')
+      assert.notEqual(await view.evaluate('performance.timeOrigin'), before.timeOrigin)
+      assert.equal(await value('Decisions 模型'), 'synthetic-reviewer')
+      passed('HTML entry edit triggers full reload and resets draft', { navigations })
+    } finally {
+      for (const [path, original, changed] of [
+        [panelPath, panel, changedPanel],
+        [cssPath, css, changedCss],
+        [htmlPath, html, changedHtml],
+      ]) {
+        const current = await readFile(path, 'utf8')
+        if (current === changed) await writeFile(path, original)
+        else assert.equal(current, original, `Concurrent edit in ${path}; refusing to overwrite`)
+      }
+    }
+  }
+  assert.deepEqual(errors, [])
+  assert.ok(requests.every((request) => new URL(request.url).origin === origin))
+  passed('All browser requests remain localhost; no uncaught runtime exceptions')
+  status = 'passed'
+} finally {
+  await mkdir(evidenceDirectory, { recursive: true })
+  await Bun.write(
+    `${evidenceDirectory}/acceptance.json`,
+    JSON.stringify(
+      { status, revision: Bun.revision, checks, requests, console: events, errors, navigations },
+      null,
+      2,
+    ) +
+      `
+`,
+  )
+  console.log('CHECKS', checks.length, 'UNCAUGHT', errors.length)
+  view.close()
+}

@@ -64,3 +64,11 @@ CI 不安装或启动真实 DSH，也不声称完成宿主验收。该入口的�
 仅缓存 Bun 下载依赖，键包含系统、架构、revision 和锁文件 hash；缓存命中后仍执行 frozen install 与工具链检查。工具链和 `node_modules` 不从缓存恢复。Actions 固定提交 SHA，checkout 不保存推送凭据。JUnit、覆盖率和安装包证据通过 `always()` 上传，保留 14 天；失败不自动重试。
 
 参考：[Bun 时间控制](https://bun.com/docs/test/dates-times)、[隔离和并行](https://bun.com/docs/test/parallel)、[配置与报告](https://bun.com/docs/test/configuration)。文档描述不替代锁定 revision 的实测；新增 API 时同时检查该二进制和真实 CI。
+
+## Preview boundaries
+
+`bun run test` and `bun run test:ci` also include `preview/service.test.ts` in the same isolated Bun invocation. These source-only checks exercise the real settings normalizer through synthetic HTTP requests: write-only keys, strict validation, per-session isolation, invalid-config repair, multiline round trips, fault recovery, test-list validation, cancellation and the deterministic composer. The existing preload still rejects unexpected provider fetches. `bun run test:preview` runs just these checks.
+
+The installed-byte suite remains `test/` only: its production tests load the packed `dist/`, including the new shared-client lifecycle checks. Preview sources are deliberately absent from that harness and the consumer. The Node probe now also checks the injected stylesheet's registration and disposal. Build metadata rejects preview sources and bundled React/React DOM in production client output.
+
+Real browser checks are separate from unit tests: see [preview acceptance](preview-acceptance.md). Run `bun run verify:preview -- http://127.0.0.1:PORT --hmr` against a running preview to exercise the interface and temporarily edit/restore the shared TSX/CSS and HTML entry. It uses a fresh Bun.WebView Chrome process and writes local evidence under `artifacts/browser/`; it is optional and is not part of headless CI.

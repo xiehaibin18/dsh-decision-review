@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["bun", "react", "react-dom"],
+    "lib": ["ES2024", "DOM", "DOM.Iterable", "ESNext.Disposable"],
+    "jsx": "react-jsx",
+    "preserveSymlinks": true,
+    "allowArbitraryExtensions": true
+  },
+  "include": ["preview/**/*.ts", "preview/**/*.tsx", "src/client/**/*.d.ts"]
+}
