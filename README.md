@@ -101,6 +101,18 @@ bun run verify:host artifacts/local-decision-review-0.1.0.tgz
 
 `verify:package` builds from two clean source copies, compares tarball bytes, installs offline with an empty package cache and no development dependencies, then reruns the native Bun regressions against installed artifacts and probes key production behavior in an isolated Node process without Bun or development dependencies. The package is self-contained; Bun is a development tool, not a requirement of the installed plugin.
 
+## Standalone UI preview
+
+```sh
+bun run dev
+# If the default port is busy, print a free loopback URL:
+PREVIEW_PORT=0 bun run dev
+```
+
+The preview runs the real configuration form, rule editor, smoke results and statistics pill, with the same styles and English/Chinese dictionaries as DSH. Its Chinese control bar switches language, light/dark theme, width and 11 repeatable scenarios. A localhost Bun HTTP service keeps synthetic settings in memory and uses the production validators; it never opens a DSH profile or calls a model. Scene switches/reset discard drafts and cancel old requests; language/theme/width changes preserve the draft.
+
+The pinned Bun supports state-preserving TSX Fast Refresh and CSS updates. HTML entry changes reload the page; server/fixture changes require a server restart and page reload. See [preview development](docs/preview.md) for extension points, exact HMR semantics and the optional real-browser verifier, and [acceptance evidence](docs/preview-acceptance.md) for results and screenshots. Preview code and React DOM stay in development; production still uses the host's shared React instance and the same nine-file package contract.
+
 ## Testing
 
 [Testing and CI](docs/testing.md) documents coverage migration, isolation, fake timers, seed reproduction, JUnit/LCOV reports and the production Node checks. GitHub Actions runs the pinned toolchain on pull requests and main, including package verification on Node 24.9.0 and 24.21.0.

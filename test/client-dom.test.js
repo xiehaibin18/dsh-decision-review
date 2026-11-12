@@ -69,6 +69,8 @@ describe('built client in a simulated DSH host', () => {
     })
     client.load()
     const { container } = client
+    const stylesheet = client.window.document.querySelector('style[data-decision-review]')
+    expect(stylesheet?.textContent).toContain('.decision-review-panel')
 
     function button(label) {
       const control = client.button(label)
@@ -142,6 +144,7 @@ describe('built client in a simulated DSH host', () => {
     await client.dispose()
     client = undefined
     expect(unregisterLocale).toHaveBeenCalledTimes(1)
+    expect(stylesheet.isConnected).toBe(false)
   })
 })
 
@@ -203,7 +206,9 @@ describe('composer approval stats pill', () => {
       .mockResolvedValueOnce(statsResponse({ reviewed: 8, autoAllowed: 6, asked: 2, passRate: 75 }))
 
     await render('session-test/with space')
-    expect(fetchStats.mock.calls).toEqual([['/api/decision-review/stats?session=test%2Fwith%20space']])
+    expect(fetchStats.mock.calls.map(([url]) => url)).toEqual([
+      '/api/decision-review/stats?session=test%2Fwith%20space',
+    ])
     expect(client.container.textContent).toBe('')
 
     await advance(3999)
@@ -230,40 +235,56 @@ describe('composer approval stats pill', () => {
     expect(client.container.textContent).toBe('')
   })
 
-  test.serial('ignores an obsolete session reply and stops polling with a reply pending at unmount', async () => {
+  test.serial('clears stats on session change and polls without overlapping requests', async () => {
     openClient()
     const previous = Promise.withResolvers()
+    const current = Promise.withResolvers()
     const pending = Promise.withResolvers()
     const obsoleteStats = statsResponse({ reviewed: 99, autoAllowed: 99, passRate: 100 })
+    const currentStats = statsResponse({ reviewed: 2, autoAllowed: 1, asked: 1, passRate: 50 })
     const pendingStats = statsResponse({ reviewed: 9, autoAllowed: 9, passRate: 100 })
     fetchStats
+      .mockResolvedValueOnce(statsResponse({ reviewed: 1, autoAllowed: 1, passRate: 100 }))
       .mockReturnValueOnce(previous.promise)
-      .mockResolvedValueOnce(statsResponse({ reviewed: 2, autoAllowed: 1, asked: 1, passRate: 50 }))
+      .mockReturnValueOnce(current.promise)
       .mockReturnValueOnce(pending.promise)
 
     try {
       await render('session-old')
+      expect(client.container.textContent).toBe('1 reviewed · 100% auto-passed')
+      await advance(4000)
+      expect(fetchStats).toHaveBeenCalledTimes(2)
+      await advance(8000)
+      expect(fetchStats).toHaveBeenCalledTimes(2)
+
       await render('session-current')
-      expect(fetchStats.mock.calls).toEqual([
-        ['/api/decision-review/stats?session=old'],
-        ['/api/decision-review/stats?session=current'],
+      expect(fetchStats.mock.calls.map(([url]) => url)).toEqual([
+        '/api/decision-review/stats?session=old',
+        '/api/decision-review/stats?session=old',
+        '/api/decision-review/stats?session=current',
       ])
+      expect(fetchStats.mock.calls[1][1].signal.aborted).toBe(true)
+      expect(client.container.textContent).toBe('')
+      await act(async () => current.resolve(currentStats))
       expect(client.container.textContent).toBe('2 reviewed · 50% auto-passed')
 
       await act(async () => previous.resolve(obsoleteStats))
       expect(client.container.textContent).toBe('2 reviewed · 50% auto-passed')
 
       await advance(4000)
-      expect(fetchStats).toHaveBeenCalledTimes(3)
-      expect(fetchStats).toHaveBeenLastCalledWith('/api/decision-review/stats?session=current')
+      expect(fetchStats).toHaveBeenCalledTimes(4)
+      const [url, { signal }] = fetchStats.mock.calls.at(-1)
+      expect(url).toBe('/api/decision-review/stats?session=current')
       await client.unmount()
+      expect(signal.aborted).toBe(true)
       await act(async () => pending.resolve(pendingStats))
       await advance(8000)
-      expect(fetchStats).toHaveBeenCalledTimes(3)
+      expect(fetchStats).toHaveBeenCalledTimes(4)
       expect(client.container.textContent).toBe('')
     } finally {
       await act(async () => {
         previous.resolve(obsoleteStats)
+        current.resolve(currentStats)
         pending.resolve(pendingStats)
       })
     }
