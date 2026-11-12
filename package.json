@@ -13,8 +13,7 @@
     "test": "bun run build && bun --no-env-file test --isolate ./test ./preview/service.test.ts ./preview/verifier.test.js",
     "test:ci": "bun run build && mkdir -p artifacts/test && bun --no-env-file test --isolate --parallel=2 --randomize --seed=963452075 --coverage --reporter=junit --reporter-outfile=artifacts/test/junit.xml ./test ./preview/service.test.ts ./preview/verifier.test.js",
     "check": "bun run typecheck && bun run lint && bun run fmt:check && bun run test",
-    "prepack": "bun run build",
-    "pack": "bun pm pack --ignore-scripts --destination artifacts",
+    "pack": "bun run build && cd dist && bun pm pack --destination ../artifacts",
     "toolchain:check": "bun scripts/check-toolchain.ts",
     "verify:package": "bun run toolchain:check && bun scripts/verify-package.ts",
     "verify:host": "python3 scripts/verify-host.py",
@@ -22,33 +21,11 @@
     "test:preview": "bun run toolchain:check && bun --no-env-file test --isolate ./preview/service.test.ts ./preview/verifier.test.js",
     "verify:preview": "bun run toolchain:check && bun --no-env-file scripts/verify-preview.mjs"
   },
-  "exports": {
-    ".": "./dist/index.js",
-    "./client": "./dist/client.js",
-    "./locale/*.json": "./dist/locale/*.json",
-    "./icon": "./dist/icon.svg"
-  },
-  "files": [
-    "dist/",
-    "LICENSE.upstream"
-  ],
-  "dsh": {
-    "bundle": {
-      "patch": "./dist/cordis.patch.yml"
-    },
-    "client": {
-      "platform": "web",
-      "immediately": true,
-      "inject": [
-        "@deepseek-ai/dsh-client-ui-conversation"
-      ]
-    }
-  },
   "packageManager": "bun@1.4.3-canary.20261021.1",
   "engines": {
     "node": ">=24.9.0",
     "bun": "1.4.4-canary.1",
-    "dsh": "0.2.2-rc.1"
+    "dsh": "0.2.2-rc.1 || 0.2.2-rc.2"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.1.0",

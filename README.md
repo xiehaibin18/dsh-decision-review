@@ -87,7 +87,16 @@ An unpatched rc.1 host ignores the extra argument and still displays its built-i
 
 ## Development and packaging
 
-The plugin now builds from strict TypeScript with separate server, React client, and shared API contracts. Install the packed artifact, not the source directory. The package contains Node ESM, a DSH ModuleLoader client, locales, icon and bundle patch under `dist/`; it has no runtime npm dependencies. Supported host: DSH `0.2.2-rc.1`, Node `>=24.9.0`.
+The plugin builds from strict TypeScript with separate server, React client, and shared API contracts. `bun run build` creates a self-contained package in `dist/`, including its own `package.json`, Node ESM, a DSH ModuleLoader client, locales, icon and bundle patch. The installed package needs DSH `0.2.2-rc.1` or `0.2.2-rc.2` and Node `>=24.9.0`. It has no runtime npm dependencies or install scripts.
+
+Build and install the directory into your chosen profile:
+
+```sh
+bun run build
+dsh plugin --profile YOUR_PROFILE add ./dist --offline --ignore-scripts
+```
+
+You can also copy `dist/` to a stable location and install it from there without the source checkout or Bun. Keep that directory in place after installation because DSH links local directories. For a portable single file, `bun run pack` archives the same package as `artifacts/local-decision-review-0.1.0.tgz`, which DSH accepts in place of `./dist`.
 
 Development is pinned to Bun `1.4.4-canary.1+963452075` for native formatting, type checking, lint and `bun:test`. Its immutable npm distribution is `bun@1.4.3-canary.20261021.1`; the version labels differ, so scripts check the full binary revision. See the [development guide](https://github.com/xiehaibin18/dsh-decision-review/blob/main/docs/development.md) for isolated toolchain setup, source/output boundaries, commands, and local installation.
 
@@ -96,10 +105,11 @@ bun install --frozen-lockfile
 bun run check
 bun run pack
 bun run verify:package
+bun run verify:host dist
 bun run verify:host artifacts/local-decision-review-0.1.0.tgz
 ```
 
-`verify:package` builds from two clean source copies, compares tarball bytes, installs offline with an empty package cache and no development dependencies, then reruns the native Bun regressions against installed artifacts and probes key production behavior in an isolated Node process without Bun or development dependencies. The package is self-contained; Bun is a development tool, not a requirement of the installed plugin.
+`verify:package` builds from two clean source copies and compares tarball bytes. It installs both a detached copy of `dist/` and the tarball offline with empty package caches, verifies that they install identical files, and probes both in isolated Node processes. It also reruns the native Bun regressions against the installed package bytes.
 
 ## Standalone UI preview
 
@@ -115,6 +125,6 @@ The pinned Bun supports state-preserving TSX Fast Refresh and CSS updates. HTML 
 
 ## Testing
 
-[Testing and CI](docs/testing.md) documents coverage migration, isolation, fake timers, seed reproduction, JUnit/LCOV reports and the production Node checks. GitHub Actions runs the pinned toolchain on pull requests and main, including package verification on Node 24.9.0 and 24.21.0.
+[Testing and CI](https://github.com/xiehaibin18/dsh-decision-review/blob/main/docs/testing.md) documents coverage migration, isolation, fake timers, seed reproduction, JUnit/LCOV reports and the production Node checks. GitHub Actions runs the pinned toolchain on pull requests and main, including package verification on Node 24.9.0 and 24.21.0.
 
 The suite covers the compose rules (including the hard refusal), Decisions response validation, settings normalization and the paused-review behaviour for invalid stored settings, the session engine against the host stream protocol, the Connection routes, the approval flow with the review trail, a host-integration double for `apply()`, and the Web UI panel through real React and jsdom. It uses doubles for the host, so it does not replace a live check of an installed host. The additional DOM test executes the built classic script with real React, the actual config/save/test handlers, a temporary synthetic profile, and simulated Decisions responses. The separate installed-host verifier uses the real DSH loader and authenticated HTTP stack, including its resolved locale/icon metadata and client artifact URL. It does not mount the actual DSH browser UI. Neither test uses a real user profile or an external model. See the [host verification scope](https://github.com/xiehaibin18/dsh-decision-review/blob/main/docs/host-verification.md). Tests use synthetic fixtures only. Offline policy and projection checks verify the inputs and deterministic routing; they do not establish a model misjudgment rate or prove real-model authorization behavior.
