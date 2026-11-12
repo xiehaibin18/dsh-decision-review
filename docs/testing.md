@@ -4,7 +4,7 @@ Bun 负责测试编排；生产插件仍由 DSH 的 Node 宿主运行。测试�
 
 ## 迁移基线与覆盖映射
 
-迁移基线是 PR #3 合并提交 `4ac7576`，本次先在 Node 24.22.2 复现了 143 项通过、无跳过的测试。原安装包验证会在已安装字节上运行其中 142 项，另 1 项真实 React/jsdom 测试需要开发依赖。迁移不保留第二套 Node 测试运行器；输入表改为 `test.each` 后，每个输入有独立的失败名称，因此数量不再与原测试一一对应。本次全套为 228 项：纯逻辑由 37 项展开为 85 项，服务端由 87 项展开为 121 项，客户端由 19 项增至 22 项。除拆开原有多场景断言，还补充了临界值、实际超时、取消和轮询清理检查；没有删除原有业务检查。
+迁移基线是 PR #3 合并提交 `4ac7576`，本次先在 Node 24.22.2 复现了 143 项通过、无跳过的测试。原安装包验证会在已安装字节上运行其中 142 项，另 1 项真实 React/jsdom 测试需要开发依赖。迁移不保留第二套 Node 测试运行器；输入表改为 `test.each` 后，每个输入有独立的失败名称，因此数量不再与原测试一一对应。业务回归仍为 228 项：纯逻辑由 37 项展开为 85 项，服务端由 87 项展开为 121 项，客户端由 19 项增至 22 项。除拆开原有多场景断言，还补充了临界值、实际超时、取消和轮询清理检查；没有删除原有业务检查。另有 14 项 preload 防线检查，总计 242 项。
 
 | 测试文件 | 保留的业务边界 | 迁移方式 |
 | --- | --- | --- |
@@ -18,6 +18,7 @@ Bun 负责测试编排；生产插件仍由 DSH 的 Node 宿主运行。测试�
 | `host-integration` | profile 选择、恢复与子会话权限、Auto 注册/卸载、取消并排空评审 | 生命周期 hooks、临时目录、异步清理 |
 | `client` | 模式切换、保存状态、非法配置修复、多行规则、中英文和统计轮询 | 真实 React/jsdom、原生 mock、时间与清理控制 |
 | `client-dom` | 构建的 classic ModuleLoader、真实 React 挂载、保存和重新加载 | jsdom + React act，完整卸载与全局恢复 |
+| `preload` | 导入、初始化、测试及收尾阶段的意外 fetch 不得漏报；后续用例和文件不受污染 | 真正启动 Bun 子进程，核验退出码、诊断、正常对照及临时 profile 清理 |
 
 所有审查输入、密钥和会话都是合成数据。Connection 的鉴权声明由模拟宿主测试检查；真正 HTTP 401 和认证 cookie 的有效性属于独立 DSH 验收，不能从模拟路由调用推断。
 
@@ -32,13 +33,13 @@ bun run test:ci
 bun run verify:package
 ```
 
-`test` 和 `test:ci` 会先构建；直接调用 `bun test` 前需先构建。`bunfig.toml` 的 `env = false` 禁止外层命令和子进程自动加载本地 `.env`，测试命令还显式使用 `--no-env-file`。`test/preload.js` 在测试导入前设置临时 profile 和临时 home，并默认拒绝所有 fetch；即使业务代码捕获错误，忘记提供合成替身的测试也会失败。每个套件负责恢复自己的 spy、模拟时钟、DOM、环境和临时文件。
+`test` 和 `test:ci` 会先构建；直接调用 `bun test` 前需先构建。`bunfig.toml` 的 `env = false` 禁止外层命令和子进程自动加载本地 `.env`，测试命令还显式使用 `--no-env-file`。`test/preload.js` 在测试导入前设置临时 profile 和临时 home，并默认拒绝所有 fetch；计数只在检查并报告后清零，preload 的 afterEach 和最终 afterAll 覆盖导入、beforeAll、测试正文和收尾阶段；即使业务代码捕获错误，遗漏合成替身的请求也会使进程失败。每个套件负责恢复自己的 spy、模拟时钟、DOM、环境和临时文件。
 
 使用 `--isolate` 为每个文件建立新的全局对象和模块注册表。文件内修改 fetch、console、环境、DOM 或时间的测试保持串行；没有启用全局 `--concurrent`，也不使用 retry 掩盖污染。不要用 `mock.module` 替换真实插件或 React 模块。当前没有需要维护的大型快照，业务结果使用有判别力的字段断言。
 
-`test:ci` 采用两个隔离 worker 并行运行文件；同一轮本机带覆盖率的检查从串行约 935 ms 降至 630 ms，结果与报告一致。日常 `test` 默认串行隔离，便于定位；共享状态用例在文件内串行，客户端用例还显式声明 `test.serial`。该 revision 支持 `--shard` 和耗时分配，但当前仅十个文件，未增加分片作业和耗时缓存。
+`test:ci` 采用两个隔离 worker 并行运行文件；结果与报告经过串行对照验证。日常 `test` 默认串行隔离，便于定位；共享状态用例在文件内串行，客户端用例还显式声明 `test.serial`。该 revision 支持 `--shard` 和耗时分配，但当前仅十一个文件，未增加分片作业和耗时缓存。
 
-`test:ci` 使用随机顺序和固定 seed `963452075`；复现时保留日志里的 seed 和同一 Bun revision。新增时间测试使用该 revision 的 `jest.useFakeTimers`、异步推进和恢复 API。系统时间只影响读取时钟；推进 timer 才会触发超时，异步推进还会让 Promise 队列继续执行。该版本的 `AbortSignal.timeout` 跟随假时钟，不需要自行模拟其实现。
+`test:ci` 使用随机顺序和固定 seed `963452075`。复现时保留日志里的 seed 和同一 Bun revision。时间测试用 `jest.useFakeTimers` 启用假时钟，最后用 `jest.useRealTimers` 恢复。`jest.setSystemTime` 调整系统时间，`jest.advanceTimersByTime` 同步推进假时钟并触发到期的定时回调和 `AbortSignal.timeout`。评审测试在推进后显式等待结果，客户端统计测试在 React 的 `act` 中推进时间并等待界面更新。
 
 JUnit 位于 `artifacts/test/junit.xml`，文本覆盖率输出到日志，LCOV 位于 `coverage/lcov.info`。覆盖率针对加载的构建代码；classic 客户端通过 VM/jsdom 执行，不能把这份统计当作完整客户端源码覆盖率。因此暂不设置会造成错误信心的全局覆盖率门槛；客户端行为由真实挂载及交互断言保护。
 

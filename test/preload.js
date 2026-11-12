@@ -18,20 +18,28 @@ function deny_network() {
 
 globalThis.fetch = deny_network
 beforeEach(() => {
-  unexpected_requests = 0
   globalThis.fetch = deny_network
 })
 
-afterEach(() => {
-  // A fail-closed review can catch the fetch error; still fail the test that forgot its mock.
-  if (unexpected_requests !== 0) throw new Error(`Blocked ${unexpected_requests} unexpected network request(s)`)
-})
+function check_network_requests() {
+  // Consume only checked requests, including ones caught during imports or setup.
+  const pending_requests = unexpected_requests
+  unexpected_requests = 0
+  if (pending_requests !== 0) throw new Error(`Blocked ${pending_requests} unexpected network request(s)`)
+}
+
+afterEach(check_network_requests)
 
 afterAll(() => {
-  globalThis.fetch = original_fetch
-  for (const [key, value] of Object.entries(saved_environment)) {
-    if (value === undefined) delete process.env[key]
-    else process.env[key] = value
+  try {
+    // The pinned Bun runs preload teardown after the file's own teardown hooks.
+    check_network_requests()
+  } finally {
+    globalThis.fetch = original_fetch
+    for (const [key, value] of Object.entries(saved_environment)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+    rmSync(sandbox, { recursive: true, force: true })
   }
-  rmSync(sandbox, { recursive: true, force: true })
 })
