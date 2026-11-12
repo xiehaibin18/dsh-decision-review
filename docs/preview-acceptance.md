@@ -1,6 +1,12 @@
 # 独立预览验收记录
 
-## 槽位与画布预览
+## 槽位预览与双语文案的组合验收
+
+在 `46085e529fc5ea84a764843e3e313e81983b3adc` 的槽位预览上合入主分支 `3a22df67be9b9581bf6b6d99ea2e65ed24484286`（含 PR #9 的双语文案）。固定 Bun revision 下，`bun run check` 通过 269 项测试。新启动的本地预览通过 20 组浏览器检查，无未捕获异常；在选中的统计槽位验证中英文均分开显示「阻止」与「评审失败」，在最小逻辑窗口检查阈值说明，确认已保存配置与提交错误都能切换语言且无需再次提交。槽位切换、缩放拖动、尺寸下限、草稿保留和统计轮询停止的检查均保留。
+
+在独立浏览器中将统计提示改为「阻止 2 · 评审失败 0」，验证器正确拒绝。组合验收使用独立预览进程和合成数据；未重跑 `--hmr` 源码修改探针，也未执行真实 DSH 或模型调用。合入后的服务与 fixture 有变化，原先运行的预览进程需要重启并刷新页面。
+
+## 槽位与画布预览（合入双语文案前）
 
 2026 年 11 月 12 日，基于 main `14599ea` 验证按宿主槽位分别展示的预览。配置表单使用 `plugins.row.config`，统计条使用 `conversation.composer.dock`；静态模糊外壳的位置与窗口下限参照 DSH rc.1，来源及操作方式见[预览指引](preview.md)。
 
@@ -11,6 +17,10 @@
 [桌面配置槽位](evidence/slot-preview/config-desktop-dark.png) · [最小窗口统计槽位](evidence/slot-preview/dock-minimum-dark.png)。
 
 本次未重跑会临时修改源码的 `--hmr` 验收，未调用模型、更新实际 DSH 安装或执行 rc.2 像素级校对。验证产物留在独立工作树；仅文档与截图整理发生在上述验证之后，功能源码保持一致。
+
+## 双语文案（槽位与画布合入前）
+
+PR #9 的[浏览器验证记录](evidence/copy-review/preview-acceptance.json)及[阈值说明](evidence/copy-review/en-dark-narrow-thresholds.png)、[无效配置](evidence/copy-review/zh-invalid-settings.png)截图使用当时的宽／窄预览；上方组合验收使用现行逻辑画布。
 
 ## 初版预览记录
 

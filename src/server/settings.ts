@@ -7,6 +7,7 @@ import {
   type OperatorRule,
   type PublicSettings,
   type ReviewSettings,
+  type SettingsIssue,
   type Threshold,
 } from '../shared/contracts.js'
 import { errorCode, isRecord } from './json.js'
@@ -19,13 +20,13 @@ export interface Settings extends ReviewSettings {
 
 export interface StoredSettings {
   settings: Settings
-  problems: string[]
+  problems: StoredProblem[]
   damaged: boolean
 }
 
 interface NormalizeOptions {
   strict: boolean
-  problems: string[]
+  problems: StoredProblem[]
 }
 
 type SettingsDefaults = Omit<Settings, 'rules'>
@@ -53,9 +54,23 @@ const TIMEOUT_MAX_MS = 600000
 /** Record one rejected stored value. A stored value that had to be replaced
  * stops review (every call that needs it is denied, see `apply`) until valid
  * settings are saved, so the problem list is what the configuration page shows. */
-function reportStoredProblem(problems: string[], message: string) {
-  problems.push(message)
-  console.warn(`[decision-review] ${message}`)
+interface StoredProblem {
+  issue: SettingsIssue
+  detail: string
+}
+
+export class SettingsValidationError extends Error {
+  constructor(
+    readonly issue: SettingsIssue,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+
+function reportStoredProblem(problems: StoredProblem[], issue: SettingsIssue, detail: string) {
+  problems.push({ issue, detail })
+  console.warn(`[decision-review] ${detail}`)
 }
 
 function normalizeChoice<Field extends 'engine' | 'denialRoute'>(
@@ -69,8 +84,9 @@ function normalizeChoice<Field extends 'engine' | 'denialRoute'>(
   const choice = choices.find((candidate) => candidate === value)
   if (choice !== undefined) return choice
   const requirement = `must be one of ${choices.join(', ')}`
-  if (strict) throw new Error(`decision-review: ${field} ${requirement}`)
-  reportStoredProblem(problems, `stored ${field} ${requirement}; the default ${fallback} is shown`)
+  const issue: SettingsIssue = { code: field === 'engine' ? 'engine' : 'denial_route' }
+  if (strict) throw new SettingsValidationError(issue, `decision-review: ${field} ${requirement}`)
+  reportStoredProblem(problems, issue, `stored ${field} ${requirement}; the default ${fallback} is shown`)
   return fallback
 }
 
@@ -91,8 +107,9 @@ function normalizeDecisionsRoute(
   const normalized = typeof value === 'string' ? value.trim() : ''
   if (normalized !== '' && (field === 'model' || isHttpEndpoint(normalized))) return normalized
   const requirement = field === 'model' ? 'a non-empty string' : 'an absolute HTTP or HTTPS URL without credentials'
-  if (strict) throw new Error(`decision-review: ${field} must be ${requirement}`)
-  reportStoredProblem(problems, `stored ${field} must be ${requirement}; enter a valid value to resume review`)
+  const issue = { code: field }
+  if (strict) throw new SettingsValidationError(issue, `decision-review: ${field} must be ${requirement}`)
+  reportStoredProblem(problems, issue, `stored ${field} must be ${requirement}; enter a valid value to resume review`)
   return ''
 }
 
@@ -116,20 +133,38 @@ function num(value: unknown, fallback: number, field: Threshold, { strict, probl
   if (value === undefined || value === null || value === '') return fallback
   const n = numericValue(value)
   if (Number.isFinite(n) && n >= 0 && n <= 1) return n
-  if (strict) throw new Error(`decision-review: ${field} must be a number in [0,1]`)
-  reportStoredProblem(problems, `stored ${field} is not a number in [0,1]; the default ${fallback} is shown`)
+  const issue: SettingsIssue = { code: 'threshold', params: { field } }
+  if (strict) throw new SettingsValidationError(issue, `decision-review: ${field} must be a number in [0,1]`)
+  reportStoredProblem(problems, issue, `stored ${field} is not a number in [0,1]; the default ${fallback} is shown`)
   return fallback
 }
 
+type RuleProblem = { code: 'rule_invalid' | 'rule_count' | 'rule_length' | 'rule_total'; max?: number; detail: string }
+
 /** Accept a bounded rule or return the problem that prevented it from joining the list. */
-function normalizeRule(item: unknown, count: number, total: number): OperatorRule | string {
+function normalizeRule(item: unknown, count: number, total: number): OperatorRule | RuleProblem {
   const condition = isRecord(item) && typeof item.condition === 'string' ? item.condition : ''
   const verdict = isRecord(item) ? RULE_VERDICTS.find((candidate) => candidate === item.verdict) : undefined
-  if (verdict === undefined || condition.trim() === '') return 'needs a known verdict and a non-empty condition'
-  if (count >= RULE_MAX_COUNT) return `exceeds the ${RULE_MAX_COUNT}-rule limit`
-  if (condition.length > RULE_MAX_CONDITION) return `has a condition longer than ${RULE_MAX_CONDITION} characters`
-  if (total + condition.length > RULE_MAX_TOTAL)
-    return `pushes the conditions past ${RULE_MAX_TOTAL} characters in total`
+  if (verdict === undefined || condition.trim() === '') {
+    return { code: 'rule_invalid', detail: 'needs a known verdict and a non-empty condition' }
+  }
+  if (count >= RULE_MAX_COUNT) {
+    return { code: 'rule_count', max: RULE_MAX_COUNT, detail: `exceeds the ${RULE_MAX_COUNT}-rule limit` }
+  }
+  if (condition.length > RULE_MAX_CONDITION) {
+    return {
+      code: 'rule_length',
+      max: RULE_MAX_CONDITION,
+      detail: `has a condition longer than ${RULE_MAX_CONDITION} characters`,
+    }
+  }
+  if (total + condition.length > RULE_MAX_TOTAL) {
+    return {
+      code: 'rule_total',
+      max: RULE_MAX_TOTAL,
+      detail: `pushes the conditions past ${RULE_MAX_TOTAL} characters in total`,
+    }
+  }
   return { condition, verdict }
 }
 
@@ -137,20 +172,23 @@ function normalizeRule(item: unknown, count: number, total: number): OperatorRul
  * rule so it can never vanish silently; lenient mode (reading a stored file)
  * drops it and reports it, so a hand-edit typo cannot keep the plugin from
  * loading while review stays stopped until the list is saved again. */
-function normalizeRules(raw: unknown, strict: boolean, problems: string[]): OperatorRule[] {
+function normalizeRules(raw: unknown, strict: boolean, problems: StoredProblem[]): OperatorRule[] {
   if (raw === undefined || raw === null) return []
   if (!Array.isArray(raw)) {
-    if (strict) throw new Error('decision-review: rules must be a list')
-    reportStoredProblem(problems, 'stored rules are not a list; all rules were ignored')
+    const issue = { code: 'rules_list' } as const
+    if (strict) throw new SettingsValidationError(issue, 'decision-review: rules must be a list')
+    reportStoredProblem(problems, issue, 'stored rules are not a list; all rules were ignored')
     return []
   }
   const out: OperatorRule[] = []
   let total = 0
   raw.forEach((item, position) => {
     const rule = normalizeRule(item, out.length, total)
-    if (typeof rule === 'string') {
-      if (strict) throw new Error(`decision-review: rule ${position + 1} ${rule}`)
-      reportStoredProblem(problems, `stored rule ${position + 1} was dropped: it ${rule}`)
+    if ('code' in rule) {
+      const n = position + 1
+      const issue: SettingsIssue = { code: rule.code, params: rule.max === undefined ? { n } : { n, max: rule.max } }
+      if (strict) throw new SettingsValidationError(issue, `decision-review: rule ${n} ${rule.detail}`)
+      reportStoredProblem(problems, issue, `stored rule ${n} was dropped: it ${rule.detail}`)
       return
     }
     total += rule.condition.length
@@ -160,14 +198,20 @@ function normalizeRules(raw: unknown, strict: boolean, problems: string[]): Oper
 }
 
 /** Validate the request timeout: an integer the Abort timer accepts. */
-function normalizeTimeout(value: unknown, strict: boolean, problems: string[]): number {
+function normalizeTimeout(value: unknown, strict: boolean, problems: StoredProblem[]): number {
   if (value === undefined || value === null || value === '') return SETTINGS_DEFAULTS.timeoutMs
   const n = numericValue(value)
   if (Number.isInteger(n) && n >= TIMEOUT_MIN_MS && n <= TIMEOUT_MAX_MS) return n
-  if (strict)
-    throw new Error(`decision-review: timeoutMs must be an integer between ${TIMEOUT_MIN_MS} and ${TIMEOUT_MAX_MS}`)
+  const issue: SettingsIssue = { code: 'timeout', params: { min: TIMEOUT_MIN_MS, max: TIMEOUT_MAX_MS } }
+  if (strict) {
+    throw new SettingsValidationError(
+      issue,
+      `decision-review: timeoutMs must be an integer between ${TIMEOUT_MIN_MS} and ${TIMEOUT_MAX_MS}`,
+    )
+  }
   reportStoredProblem(
     problems,
+    issue,
     `stored timeoutMs is not an integer between ${TIMEOUT_MIN_MS} and ${TIMEOUT_MAX_MS}; the default ${SETTINGS_DEFAULTS.timeoutMs} is shown`,
   )
   return SETTINGS_DEFAULTS.timeoutMs
@@ -218,25 +262,31 @@ export function loadSettings(settingsPath: string): StoredSettings {
   } catch (error) {
     const code = errorCode(error)
     if (code === 'ENOENT') return { settings: normalizeSettings(undefined), problems: [], damaged: false }
-    const message = `the stored settings file could not be read (${code ?? 'unknown error'}); defaults are shown`
-    console.warn(`[decision-review] ${message}`)
-    return { settings: normalizeSettings(undefined), problems: [message], damaged: true }
+    return damagedSettings(
+      { code: 'file_unreadable' },
+      `the stored settings file could not be read (${code ?? 'unknown error'}); defaults are shown`,
+    )
   }
   let raw: unknown
   try {
     raw = JSON.parse(text)
   } catch {
-    const message = 'the stored settings file is not valid JSON; defaults are shown'
-    console.warn(`[decision-review] ${message}`)
-    return { settings: normalizeSettings(undefined), problems: [message], damaged: true }
+    return damagedSettings({ code: 'file_json' }, 'the stored settings file is not valid JSON; defaults are shown')
   }
   if (!isRecord(raw)) {
-    const message = 'the stored settings file does not hold a JSON object; defaults are shown'
-    console.warn(`[decision-review] ${message}`)
-    return { settings: normalizeSettings(undefined), problems: [message], damaged: true }
+    return damagedSettings(
+      { code: 'file_object' },
+      'the stored settings file does not hold a JSON object; defaults are shown',
+    )
   }
-  const problems: string[] = []
+  const problems: StoredProblem[] = []
   return { settings: normalizeSettings(raw, { problems }), problems, damaged: false }
+}
+
+function damagedSettings(issue: SettingsIssue, detail: string): StoredSettings {
+  const problems: StoredProblem[] = []
+  reportStoredProblem(problems, issue, detail)
+  return { settings: normalizeSettings(undefined), problems, damaged: true }
 }
 
 export function saveSettings(settingsPath: string, next: Settings): void {

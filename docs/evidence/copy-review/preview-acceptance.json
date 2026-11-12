@@ -1,0 +1,123 @@
+{
+  "status": "passed",
+  "revision": "963452075e9d7e2a47a482f297143af5ed4f76c0",
+  "baseline": "14599eabfee782292423e4b1ee5128d0a77703e5",
+  "browser": "Chrome via Bun.WebView",
+  "fixtureTraffic": "loopback only",
+  "httpRequests": 87,
+  "uncaughtExceptions": 0,
+  "screenshots": [
+    "en-dark-narrow-thresholds.png",
+    "zh-invalid-settings.png"
+  ],
+  "checks": [
+    {
+      "name": "Chinese/light/wide Decisions and three synthetic smoke results",
+      "details": {
+        "width": 1280,
+        "height": 913,
+        "scrollWidth": 1280,
+        "surfaceWidth": 744
+      }
+    },
+    {
+      "name": "Language/theme/width preserve unsaved draft; real narrow viewport",
+      "details": {
+        "width": 390,
+        "height": 844,
+        "scrollWidth": 390,
+        "surfaceWidth": 366
+      }
+    },
+    {
+      "name": "English threshold descriptions and linked field help at 390px",
+      "details": {
+        "width": 390,
+        "height": 844,
+        "scrollWidth": 390,
+        "surfaceWidth": 366
+      }
+    },
+    {
+      "name": "Successful save and HTTP reload persist normalized values"
+    },
+    {
+      "name": "English/light/narrow Follow session",
+      "details": {
+        "width": 390,
+        "height": 844,
+        "scrollWidth": 390,
+        "surfaceWidth": 366
+      }
+    },
+    {
+      "name": "Config HTTP 503 recovers by restoring endpoint and reloading"
+    },
+    {
+      "name": "Save HTTP 503 preserves draft; recovery and retry succeed"
+    },
+    {
+      "name": "Chinese rule copy and accessible names switch without editing the long draft",
+      "details": {
+        "width": 390,
+        "height": 844,
+        "scrollWidth": 390,
+        "surfaceWidth": 366
+      }
+    },
+    {
+      "name": "Multiline text survives save/reload byte-for-byte; blank rule blocks save",
+      "details": {
+        "multiline": "  第一行\n\n  npm test -- --runInBand\nlast line | 保留空格  \n"
+      }
+    },
+    {
+      "name": "Keyboard select, focus ring, linked errors, add/remove focus and bilingual narrow rules",
+      "details": {
+        "semantics": {
+          "label": "匹配条件  第一行\n\n  npm test -- --runInBand\nlast line | 保留空格  \n",
+          "required": "true",
+          "descriptions": [
+            "52/400 个字符"
+          ]
+        },
+        "invalid": {
+          "invalid": "true",
+          "descriptions": [
+            "请输入匹配条件。",
+            "0/400 个字符"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Stored and submitted settings issues switch language without resubmitting"
+    },
+    {
+      "name": "Invalid stored route/model require real validation and repair while keeping session engine"
+    },
+    {
+      "name": "Switch during delayed load cancels old scene without stale form"
+    },
+    {
+      "name": "Saving state is visible; model and multiline rule edits made during save are not overwritten",
+      "details": {
+        "savingAfterEdits": true,
+        "responsePendingAfterEdits": true,
+        "responseStatus": 200
+      }
+    },
+    {
+      "name": "Switch during delayed smoke cancels old results"
+    },
+    {
+      "name": "Test request error recovers; mixed synthetic row error renders"
+    },
+    {
+      "name": "Stats failure recovers on polling; zero-review fixture hides pill"
+    },
+    {
+      "name": "All browser requests remain localhost; no uncaught runtime exceptions"
+    }
+  ]
+}

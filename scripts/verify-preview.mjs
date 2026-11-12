@@ -9,6 +9,7 @@ const origin = target.origin
 const checkHmr = process.argv.includes('--hmr')
 const configSlot = 'plugins.row.config'
 const statsSlot = 'conversation.composer.dock'
+const statsPill = 'document.querySelector(".preview-stats-dock > span[title]")'
 const failures = []
 const evidenceDirectory = 'artifacts/browser'
 const events = []
@@ -160,6 +161,7 @@ try {
   view.onNavigated = () => navigations++
   await view.navigate(origin)
   await until(`!!document.querySelector('.decision-review-panel')`)
+  assert.equal(await view.evaluate('document.querySelector(".decision-review-panel h2").textContent'), '决策评审')
   const desktop = await canvas()
   assert.equal(desktop.width, 1280)
   assert.equal(desktop.height, 820)
@@ -201,8 +203,8 @@ try {
   await fill('Decisions 模型', 'unsaved-preview-draft')
   assert.equal(await disabled('运行冒烟测试（3 个场景）'), true)
   await choose('宿主槽位', statsSlot)
-  await until(textIncludes('自动评审 12 次'))
-  assert.doesNotMatch(await body(), /授权评审/)
+  await until(`${statsPill}?.textContent.includes('自动评审 12 次')`)
+  assert.match(await view.evaluate(`${statsPill}.title`), /阻止 1 · 评审失败 1/)
   const dock = await view.evaluate(`(() => {
     const stats = document.querySelector('.preview-stats-dock');
     const composer = document.querySelector('.preview-composer-card');
@@ -210,7 +212,7 @@ try {
       belowComposer: stats.getBoundingClientRect().top >= composer.getBoundingClientRect().bottom,
       pillFilter: getComputedStyle(stats.lastElementChild).filter,
       contextFilter: getComputedStyle(composer).filter,
-      formHidden: !!document.querySelector('.decision-review-panel').closest('[hidden]'),
+      formHidden: document.querySelector('.decision-review-panel').getClientRects().length === 0,
     };
   })()`)
   assert.equal(dock.belowComposer, true)
@@ -218,10 +220,13 @@ try {
   assert.match(dock.contextFilter, /blur\(/)
   assert.equal(dock.formHidden, true)
   await capture('zh-light-desktop-dock')
+  await choose('界面语言', 'en')
+  await until(`${statsPill}?.textContent === '12 reviewed · 67% auto-passed'`)
+  assert.match(await view.evaluate(`${statsPill}.title`), /1 blocked · Review failures: 1/)
+  passed('Selected statistics slot separates blocked calls and review failures in Chinese and English', dock)
   await choose('宿主槽位', configSlot)
   await until(`!document.querySelector('.preview-stats-dock')`)
   const requestsAfterLeavingDock = statsRequests().length
-  await choose('界面语言', 'en')
   await choose('主题', 'dark')
   await view.resize(390, 844)
   assert.equal((await canvas()).width, 1280)
@@ -236,6 +241,23 @@ try {
     'Slot/language/theme/size preserve draft; 390px browser viewport still uses logical host width',
     await capture('en-dark-narrow-dirty'),
   )
+  const thresholdSummary = '.decision-review-panel > details > summary'
+  await view.scrollTo(thresholdSummary)
+  await view.click(thresholdSummary)
+  const threshold = await field('tMedPred')
+  await view.scrollTo(threshold)
+  assert.match(await body(), /Medium risk signal when classification confidence is low/)
+  assert.match(await body(), /Leave a field blank to restore its default/)
+  assert.match(
+    await view.evaluate(
+      `document.getElementById(document.querySelector('[inputmode="numeric"]').getAttribute('aria-describedby')).textContent`,
+    ),
+    /Applies to both engines/,
+  )
+  passed(
+    'English threshold descriptions and linked field help in a 520px host window',
+    await capture('en-dark-narrow-thresholds'),
+  )
   await click('Save')
   await until(textIncludes('Settings saved.'))
   await click('重新加载已保存配置')
@@ -247,6 +269,7 @@ try {
   assert.equal(await value('Review engine'), 'session')
   assert.equal(await disabled('Run smoke test (3 scenarios)'), true)
   assert.doesNotMatch(await body(), /Decisions API URL/)
+  assert.match(await body(), /the approval setting above still applies/)
   await choose('主题', 'light')
   passed('English/light/narrow Follow session', await capture('en-light-session'))
   await choose('界面语言', 'zh')
@@ -312,6 +335,19 @@ last line | 保留空格
   await fill('Condition', longCondition)
   assert.equal(await view.evaluate('document.querySelector("textarea").getAttribute("aria-invalid")'), 'true')
   await capture('en-dark-narrow-long-rule')
+  await choose('界面语言', 'zh')
+  assert.equal(await value('匹配条件'), longCondition)
+  assert.match(await body(), /每条匹配条件最多 400 个字符/)
+  assert.equal(
+    await view.evaluate('document.querySelector(".decision-review-rule-remove").getAttribute("aria-label")'),
+    '移除规则 1',
+  )
+  await view.scrollTo('textarea')
+  passed(
+    'Chinese rule copy and accessible names switch without editing the long draft',
+    await capture('zh-dark-narrow-long-rule'),
+  )
+  await choose('界面语言', 'en')
   await fill('Condition', multiline)
   await choose('界面语言', 'zh')
   await choose('主题', 'light')
@@ -351,8 +387,29 @@ last line | 保留空格
   assert.equal(await value('Decisions API 地址'), '')
   assert.equal(await value('Decisions 模型'), '')
   assert.match(await body(), /已保存的设置无效/)
+  const storedAlert = '.decision-review-panel > :nth-child(1 of [role="alert"])'
+  const storedDetails = '.decision-review-panel [role="alert"] summary'
+  await view.scrollTo(storedDetails)
+  await view.click(storedDetails)
+  const alertText = (selector) => view.evaluate(`document.querySelector(${JSON.stringify(selector)})?.innerText`)
+  const storedText = await alertText(storedAlert)
+  assert.match(storedText, /Decisions API 地址必须是/)
+  assert.match(storedText, /请输入 Decisions 模型名称/)
+  const saveAlert = '.decision-review-panel > :nth-child(2 of [role="alert"])'
   await click('保存')
   await until(textIncludes('无法保存设置。'))
+  assert.match(await alertText(saveAlert), /Decisions API 地址必须是/)
+  await view.scrollTo(saveAlert)
+  await capture('zh-invalid-settings')
+  const savesBeforeLanguageSwitch = requests.filter(({ url }) => url.endsWith('/decision-review/save')).length
+  await choose('界面语言', 'en')
+  await until(textIncludes('Could not save settings.'))
+  assert.match(await alertText(saveAlert), /The Decisions API URL must be an absolute HTTP or HTTPS URL/)
+  assert.match(await alertText(storedAlert), /The Decisions API URL must be an absolute HTTP or HTTPS URL/)
+  assert.equal(requests.filter(({ url }) => url.endsWith('/decision-review/save')).length, savesBeforeLanguageSwitch)
+  await capture('en-invalid-settings')
+  passed('Stored and submitted settings issues switch language without resubmitting')
+  await choose('界面语言', 'zh')
   await fill('Decisions API 地址', 'https://fixed.example.invalid/decisions')
   await fill('Decisions 模型', 'repaired-synthetic-reviewer')
   await click('保存')
@@ -421,13 +478,13 @@ last line | 保留空格
   const requestsBeforeError = statsRequests().length
   await scene('stats-error', false)
   await expectStatsResponse(requestsBeforeError, 503)
-  assert.doesNotMatch(await body(), /自动评审 12 次/)
+  assert.equal(await view.evaluate(`!!${statsPill}`), false)
   await click('恢复接口')
-  await until(textIncludes('自动评审 12 次'), 6500)
+  await until(`${statsPill}?.textContent.includes('自动评审 12 次')`, 6500)
   const requestsBeforeEmpty = statsRequests().length
   await scene('stats-empty', false)
   await expectStatsResponse(requestsBeforeEmpty, 200)
-  await until(`!${textIncludes('自动评审 12 次')}`)
+  await until(`!${statsPill}`)
   assert.doesNotMatch(await body(), /自动评审 12 次/)
   passed('Stats failure recovers on polling; zero-review fixture hides pill')
   if (checkHmr) {

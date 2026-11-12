@@ -51,8 +51,8 @@ test('does not apply an allow rule when numeric-string confidence is below the t
 
 describe('allow_if_requested', () => {
   const matchedRule = { choice: 'r0' }
-  const unrequested = { zh: /未见你明确要求/, en: /did not explicitly request/ }
-  const unassessable = { zh: /无法评估你是否明确要求/, en: /could not be assessed/ }
+  const unrequested = { zh: /明确授权分数低于/, en: /explicit authorization score.*below the threshold/ }
+  const unassessable = { zh: /未返回.*明确授权分数/, en: /did not return the explicit authorization score/ }
 
   test.each([
     ['no authorization at medium risk', 'medium', { type: 'predicate', probability: 0 }, 0, unrequested],
@@ -137,10 +137,16 @@ describe('refused predicates', () => {
 })
 
 describe('humanWhy', () => {
+  test('keeps opposite sides of a threshold distinct in both languages', () => {
+    const why = { code: 'low_confidence', value: 0.749, threshold: 0.75 }
+    expect(humanWhy(why, 'en')).toContain('0.749 < 0.75')
+    expect(humanWhy(why, 'zh')).toContain('0.749 < 0.75')
+  })
+
   test.each([
     ['an omitted reason', undefined, 'en', /did not approve/],
     ['a null reason', null, 'en', /did not approve/],
-    ['an unknown reason', { code: 'nonexistent' }, 'zh', /未通过/],
+    ['an unknown reason', { code: 'nonexistent' }, 'zh', /未放行/],
   ])('falls back to a generic line for %s', (_scenario, why, locale, message) => {
     expect(humanWhy(why, locale)).toMatch(message)
   })
@@ -154,7 +160,7 @@ describe('humanWhy', () => {
     const english = humanWhy(why, 'en')
     const chinese = humanWhy(why, 'zh')
     expect(english).toMatch(/authorization.*classified as medium risk/)
-    expect(chinese).toMatch(/明确授权.*中风险/)
+    expect(chinese).toMatch(/授权分数.*中风险/)
     expect(`${english} ${chinese}`).not.toContain('undefined')
   })
 })

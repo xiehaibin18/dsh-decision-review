@@ -5,6 +5,7 @@ import {
   TEST_SCENARIO_NAMES,
   type ConfigResponse,
   type SaveResponse,
+  type SettingsIssue,
   type TestResponse,
   type TestResult,
   type TestScenarioName,
@@ -17,6 +18,7 @@ import {
   normalizeSettings,
   publicSettings,
   saveSettings,
+  SettingsValidationError,
   type Settings,
   type StoredSettings,
 } from './settings.js'
@@ -146,7 +148,11 @@ async function runTestScenario(
 class RequestError extends Error {
   readonly status: number
 
-  constructor(status: number, message: string) {
+  constructor(
+    status: number,
+    message: string,
+    readonly issue?: SettingsIssue,
+  ) {
     super(message)
     this.status = status
   }
@@ -212,7 +218,7 @@ export function reviewRoutes(
       handle: async () =>
         jsonResponse({
           settings: publicSettings(holder.settings),
-          problems: holder.problems,
+          problems: holder.problems.map(({ issue }) => issue),
           runtime: { engine: holder.settings.engine, ...runtime(), paused: holder.problems.length > 0 },
         } satisfies ConfigResponse),
     },
@@ -226,7 +232,8 @@ export function reviewRoutes(
         try {
           next = normalizeSettings(mergeSettingsUpdate(holder.settings, body.settings), { strict: true })
         } catch (error) {
-          throw new RequestError(400, error instanceof Error ? error.message : String(error))
+          if (!(error instanceof SettingsValidationError)) throw error
+          throw new RequestError(400, error.message, error.issue)
         }
         if (holder.damaged) backUpDamagedSettings(settingsPath)
         saveSettings(settingsPath, next)
@@ -252,7 +259,9 @@ export function reviewRoutes(
         const body = await readJsonBody(request)
         const names = testScenarioNames(body.scenarios)
         if (holder.problems.length > 0)
-          throw new RequestError(409, 'Fix the stored settings before testing the Decisions API')
+          throw new RequestError(409, 'Fix the stored settings before testing the Decisions API', {
+            code: 'stored_invalid',
+          })
         // One settings snapshot and one cancellation signal for the whole run.
         const settings = holder.settings
         const signal = AbortSignal.any([request.signal, lifecycle.signal])
@@ -270,7 +279,9 @@ export function guarded(handle: ConnectionFetchRoute['fetch']): ConnectionFetchR
       return await handle(request)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      return jsonResponse({ error: message }, error instanceof RequestError ? error.status : 500)
+      return error instanceof RequestError
+        ? jsonResponse({ error: message, issue: error.issue }, error.status)
+        : jsonResponse({ error: message }, 500)
     }
   }
 }

@@ -232,7 +232,7 @@ describe('Connection routes', () => {
       expect(composed.decision).toBe('deny')
       expect(composed.display.en).toMatch(/high risk/)
       expect(composed.display.zh).toMatch(/高风险/)
-      expect(composed.display.en).not.toMatch(/asks you to confirm/)
+      expect(composed.display.en).not.toMatch(/requests your approval/)
       expect(composed.display.zh).not.toMatch(/请你确认/)
     })
   })

@@ -80,9 +80,10 @@ export function SmokeTest({ t, resolveText, isDecisions, dirty, saving, running,
   return (
     <section style={{ ...STACK, borderTop: '1px solid ' + BORDER, paddingTop: 14 }}>
       <h2 style={HEADING}>{t('test.title')}</h2>
+      <p style={NOTE}>{t('test.desc')}</p>
       <div style={ROW}>
         <button type="button" onClick={onRun} disabled={disabled} style={buttonStyle(disabled)}>
-          {t(running ? 'test.running' : 'test.run')}
+          {running ? t('test.running') : t('test.run', { count: TEST_SCENARIO_NAMES.length })}
         </button>
         {!isDecisions ? (
           <span style={NOTE}>{t('test.sessions')}</span>

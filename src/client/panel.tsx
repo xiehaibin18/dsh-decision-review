@@ -13,7 +13,7 @@ import {
 } from '../shared/contracts.js'
 import { reportError, type ApiError, type ReviewApi } from './api.js'
 import { Field, TechnicalDetails } from './components.js'
-import type { ResolveText, Translate } from './messages.js'
+import { settingsIssueText, type ResolveText, type Translate } from './messages.js'
 import { RulesEditor } from './rules-editor.js'
 import { draftRules, ruleData, validateRules, type DraftRule, type RuleChanges } from './rules.js'
 import { SmokeTest } from './smoke-test.js'
@@ -86,7 +86,7 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
   const { rules: storedRules, ...initialFields } = initialConfig.settings
   const [settings, setSettings] = React.useState<DraftSettings>(initialFields)
   const [rules, setRules] = React.useState<DraftRule[]>(() => draftRules(storedRules, { current: 1 }))
-  const [problems, setProblems] = React.useState(() => readProblems(initialConfig.problems))
+  const [problems, setProblems] = React.useState(initialConfig.problems)
   const [error, setError] = React.useState<ApiError | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [saved, setSaved] = React.useState(false)
@@ -201,7 +201,7 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
         setSettings((prev) => ({ ...prev, hasApiKey: savedFields.hasApiKey }))
       }
       setSaved(true)
-      setProblems(readProblems(payload.problems))
+      setProblems(payload.problems)
     } catch (err) {
       if (!signal.aborted) setError(reportError('save.error', err))
     } finally {
@@ -269,10 +269,11 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
           <p style={NOTE}>{t('problems.desc')}</p>
           <TechnicalDetails
             t={t}
+            label={t('problems.details')}
             detail={
               <ul style={{ paddingInlineStart: 20, marginBlock: 4 }}>
-                {problems.map((text, i) => (
-                  <li key={i}>{text}</li>
+                {problems.map((issue, i) => (
+                  <li key={i}>{settingsIssueText(t, issue, true)}</li>
                 ))}
               </ul>
             }
@@ -280,7 +281,7 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
         </div>
       )}
 
-      <Field label={t('engine.label')}>
+      <Field label={t('engine.label')} hint={t('engine.hint')}>
         <select
           value={settings.engine}
           onChange={(event) => setField('engine', event.target.value as ReviewEngine)}
@@ -324,7 +325,7 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
         </div>
       )}
       {showDecisionsFields && textInput('model', t('model.label'))}
-      <Field label={t('denialroute.label')}>
+      <Field label={t('denialroute.label')} hint={t('denialroute.hint')}>
         <select
           value={settings.denialRoute ?? 'ask'}
           onChange={(event) => setField('denialRoute', event.target.value as DenialRoute)}
@@ -351,6 +352,7 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
         <details>
           <summary style={{ fontWeight: 600, cursor: 'pointer' }}>{t('thresholds.title')}</summary>
           <div style={{ ...STACK, marginTop: 8 }}>
+            <p style={NOTE}>{t('thresholds.hint')}</p>
             {THRESHOLDS.map((field) => textInput(field, t(`thresholds.${field}`), null, 'decimal'))}
           </div>
         </details>
@@ -389,7 +391,16 @@ function RequestError({ t, error }: { t: Translate; error: ApiError }) {
   return (
     <div role="alert" style={ERROR_NOTE}>
       {t(error.key)}
-      <TechnicalDetails t={t} detail={error.status ? t('error.http', { status: error.status }) : error.detail} />
+      {error.issue ? (
+        <div>{settingsIssueText(t, error.issue)}</div>
+      ) : (
+        <TechnicalDetails
+          t={t}
+          detail={[error.status ? t('error.http', { status: error.status }) : '', error.detail]
+            .filter(Boolean)
+            .join('\n')}
+        />
+      )}
     </div>
   )
 }
@@ -404,8 +415,4 @@ function savedForm(fields: DraftSettings, rules: DraftRule[]) {
     // The host exposes an invalid stored endpoint or model as an empty field.
     needsDecisionsRepair: fields.endpoint === '' || fields.model === '',
   }
-}
-
-function readProblems(problems: string[]) {
-  return Array.isArray(problems) ? problems : []
 }
