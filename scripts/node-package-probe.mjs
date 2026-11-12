@@ -22,7 +22,7 @@ assert.equal(process.release.name, 'node')
 assert.equal(process.versions.bun, undefined)
 assert.equal(process.permission.has('child'), false)
 const entry = import.meta.resolve(PACKAGE)
-assert.equal(entry, new URL('../node_modules/@local/decision-review/dist/index.js', import.meta.url).href)
+assert.equal(entry, new URL('../node_modules/@local/decision-review/index.js', import.meta.url).href)
 
 globalThis.fetch = async () => {
   throw new Error('Unexpected fetch during package load')

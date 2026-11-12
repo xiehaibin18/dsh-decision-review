@@ -45,11 +45,12 @@ JUnit 位于 `artifacts/test/junit.xml`，文本覆盖率输出到日志，LCOV 
 
 ## 安装产物和生产 Node
 
-`verify:package` 冻结安装两个独立源码副本，检查类型并构建，比较 tarball SHA-256，核对九个预期文件，然后用空缓存进行离线生产安装。Bun 通过独立测试目录在已安装 `dist` 上重跑完整的同一套回归，包括真实 React/jsdom。这个测试目录可以使用开发依赖；生产消费目录始终不含这些依赖。独立 Node 子进程从包名加载安装产物，验证导出、资源及关键行为；它使用隔离环境和无 Bun 的 PATH，消费目录没有源码或开发依赖。Node 验证入口只使用 Node 内置 API 和共用合成 fixtures，不另建长期分叉的业务套件。
+`verify:package` 冻结安装两个独立源码副本，检查类型并构建，比较 tarball SHA-256。它将 `dist/` 复制到源码树之外，在各自的空缓存中离线安装目录和 tarball，并比较安装后九个文件的内容。两种形式分别由独立 Node 子进程从包名加载，验证导出、资源及关键行为。生产消费目录没有源码和开发依赖，Node 进程使用隔离环境和无 Bun 的 PATH。Bun 通过独立测试目录在相同的安装字节上重跑完整回归，包括真实 React/jsdom。Node 验证入口只使用 Node 内置 API 和共用合成 fixtures，不另建长期分叉的业务套件。
 
 构建、安装和 Node 验证证据保存在 `artifacts/verification/`。目录受 Git 忽略，CI 会上传作为限时保留的构建附件；失败日志用于定位具体阶段。真实 DSH 的加载、认证 HTTP 和资源交付仍使用现有独立入口：
 
 ```sh
+bun run verify:host --dsh /usr/local/bin/dsh dist
 bun run verify:host --dsh /usr/local/bin/dsh artifacts/local-decision-review-0.1.0.tgz
 ```
 

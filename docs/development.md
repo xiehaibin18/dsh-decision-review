@@ -1,6 +1,6 @@
 # 开发与安装
 
-工程使用固定 Bun canary 构建；安装后的插件由 DSH 的 Node 宿主运行。当前支持 DSH `0.2.2-rc.1`、Node `>=24.9.0`，客户端使用宿主的 React 18 共享实例。
+工程使用固定 Bun canary 构建；安装后的插件由 DSH 的 Node 宿主运行。当前支持 DSH `0.2.2-rc.1` 和 `0.2.2-rc.2`、Node `>=24.9.0`，客户端使用宿主的 React 18 共享实例。开发依赖仍使用 `rc.1` 的类型声明。
 
 ## 固定工具链
 
@@ -28,8 +28,8 @@ bun install --frozen-lockfile
 | `src/shared/contracts.ts` | 插件拥有的设置、规则限制和 HTTP 消息类型 |
 | `assets/` | patch、图标与插件元数据的中英文 locale |
 | `scripts/`、`test/` | 开发、打包与验收工具，不进入安装包 |
-| `dist/` | 生成的 Node ESM、浏览器 classic script 与运行资源，不提交 |
-| `artifacts/` | 本地安装用 tarball，不提交 |
+| `dist/` | 可直接安装的目录，包含独立的 `package.json`、Node ESM、浏览器 classic script、运行资源及说明，不提交 |
+| `artifacts/` | `dist/` 打成的 tarball 和本地验收证据，不提交 |
 
 服务器和客户端分别进行严格类型检查，开发脚本只使用 Node API。宿主类型来自固定版本的官方 npm 包；其声明引用的一些可选依赖也作为开发依赖显式安装。Bun 使用 hoisted 布局，TypeScript 保留包的符号链接解析路径，以便这些声明找到依赖。没有关闭第三方声明检查，也没有把宿主服务替换为自造类型。客户端额外声明了上游类型文件引用的 KaTeX CSS 副作用资源。
 
@@ -48,17 +48,18 @@ bun run check
 bun run pack
 ```
 
-`test` 先构建，再以原生 `bun:test` 运行隔离回归；`test:ci` 额外输出固定随机 seed、JUnit 和覆盖率。复现方式、迁移覆盖和运行时边界见[测试与 CI](testing.md)。`check` 汇总类型、lint、格式检查和测试。`pack` 的 prepack 钩子会重新构建，因此干净源码也可直接打包。修改依赖后提交 `package.json` 和 `bun.lock`；格式化单独提交，方便审查。
+`test` 先构建，再以原生 `bun:test` 运行隔离回归；`test:ci` 额外输出固定随机 seed、JUnit 和覆盖率。复现方式、迁移覆盖和运行时边界见[测试与 CI](testing.md)。`check` 汇总类型、lint、格式检查和测试。`pack` 先重新构建，再把 `dist/` 作为包根目录打包，因此干净源码也可直接打包。修改依赖后提交 `package.json` 和 `bun.lock`；格式化单独提交，方便审查。
 
 ## 安装包验收
 
 ```sh
 bun run verify:package
 bun run verify:package --keep
+bun run verify:host --dsh /usr/local/bin/dsh dist
 bun run verify:host --dsh /usr/local/bin/dsh artifacts/local-decision-review-0.1.0.tgz
 ```
 
-`verify:package` 从当前 Git 源文件及尚未提交的新增源文件创建两个独立临时副本，不复制忽略的依赖、产物或配置文件；分别冻结安装、严格检查、构建并打包，比较 tarball SHA-256。它会核对包内的九个文件，在空缓存目录中离线生产安装，并用 Node 验证包导出和运行资源，再由 Bun 针对已安装产物重跑同一套回归，并在隔离 Node 子进程中验证关键生产行为。真实 React DOM 测试在干净源码副本与独立安装产物测试目录中执行，其 React/jsdom 仅为测试工具依赖，不进入生产消费目录。
+`verify:package` 从当前 Git 源文件及尚未提交的新增源文件创建两个独立临时副本，不复制忽略的依赖、产物或配置文件；分别冻结安装、严格检查、构建并打包，比较 tarball SHA-256。它会把 `dist/` 复制到源码树之外，分别在空缓存目录中离线安装目录和 tarball，核对两者安装出的文件逐字节一致，并用隔离 Node 子进程分别验证导出、资源和关键生产行为。Bun 针对已安装产物重跑同一套回归。真实 React DOM 测试使用的 React/jsdom 仅为测试工具依赖，不进入生产消费目录。
 
 `verify:host` 需要已安装的 DSH 和 Python 3，使用临时 profile，验证真实宿主安装、启用、认证 API、客户端资源、中英文元数据及图标；不调用模型。执行范围和版本来源见[宿主验证说明](host-verification.md)。
 
@@ -66,14 +67,21 @@ bun run verify:host --dsh /usr/local/bin/dsh artifacts/local-decision-review-0.1
 
 ## 本地安装
 
-从源码构建 tarball 后，明确指定要安装到的 profile：
+从源码构建后，明确指定要安装到的 profile：
+
+```sh
+bun run build
+dsh plugin --profile YOUR_PROFILE add ./dist --offline --ignore-scripts
+```
+
+DSH 会链接安装目录。可以把整个 `dist/` 复制到固定位置再安装；安装后应保留该位置。如果需要分发单个文件或独立于该目录使用，可以从同一构建产物打包：
 
 ```sh
 bun run pack
 dsh plugin --profile YOUR_PROFILE add ./artifacts/local-decision-review-0.1.0.tgz --offline --ignore-scripts
 ```
 
-安装只需要 tarball 与支持版本的 DSH，不需要仓库源码、Bun、开发依赖或开发服务器。不要把源码目录直接作为插件安装。启用本插件时，官方 auto-review 插件应保持禁用；两者使用同一个 Auto 集成槽位。
+安装只需要完整的 `dist/` 或 tarball 与支持版本的 DSH。构建工具、源码和开发依赖不进入交付包。启用本插件时，官方 auto-review 插件应保持禁用；两者使用同一个 Auto 集成槽位。
 
 本阶段保留 PR #2 的生命周期、授权、无损多行规则和 i18n 行为。DSH rc.1 的同值权限选择不写事件，以及未修改宿主忽略 Auto presentation metadata 的限制仍然存在，详见 README。后续的深入 TSX 拆分、热更新预览及 UI 库接入不在本阶段内。
 

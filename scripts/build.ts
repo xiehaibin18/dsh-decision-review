@@ -1,13 +1,36 @@
 import { execFileSync } from 'node:child_process'
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import sourceManifest from '../package.json' with { type: 'json' }
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const staging = await mkdtemp(join(tmpdir(), 'decision-review-build-'))
 // React is owned by the host's ModuleLoader. Other library imports are bundled.
 const sharedClientModules = ['react', 'react/jsx-runtime']
+const manifest = {
+  name: sourceManifest.name,
+  version: sourceManifest.version,
+  private: sourceManifest.private,
+  type: sourceManifest.type,
+  description: sourceManifest.description,
+  exports: {
+    '.': './index.js',
+    './client': './client.js',
+    './locale/*.json': './locale/*.json',
+    './icon': './icon.svg',
+  },
+  engines: { node: sourceManifest.engines.node, dsh: sourceManifest.engines.dsh },
+  dsh: {
+    bundle: { patch: './cordis.patch.yml' },
+    client: {
+      platform: 'web',
+      immediately: true,
+      inject: ['@deepseek-ai/dsh-client-ui-conversation'],
+    },
+  },
+}
 
 interface BuildMetadata {
   inputs: Record<string, { imports: { path: string; external?: boolean }[] }>
@@ -53,7 +76,7 @@ try {
   const clientText = await bundle('client')
   // DSH serves a classic script and supplies require inside this factory.
   const registeredClient = `window.__ModuleLoader__.load({
-  id: '@local/decision-review',
+  id: ${JSON.stringify(manifest.name)},
   factory(require) {
     const module = { exports: {} };
     const exports = module.exports;
@@ -67,8 +90,11 @@ ${clientText}
   await mkdir(dist, { recursive: true })
   await writeFile(join(dist, 'index.js'), serverText)
   await writeFile(join(dist, 'client.js'), registeredClient)
+  await writeFile(join(dist, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
   await cp(join(root, 'assets'), dist, { recursive: true })
-  console.info('Built Node server, ModuleLoader client, and runtime assets in dist/')
+  await copyFile(join(root, 'README.md'), join(dist, 'README.md'))
+  await copyFile(join(root, 'LICENSE.upstream'), join(dist, 'LICENSE.upstream'))
+  console.info('Built installable DSH bundle in dist/')
 } finally {
   await rm(staging, { recursive: true, force: true })
 }

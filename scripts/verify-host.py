@@ -1,4 +1,4 @@
-"""Exercise a packed decision-review bundle in an isolated, installed DSH host."""
+"""Exercise a decision-review directory or tarball in an isolated, installed DSH host."""
 
 import argparse
 import base64
@@ -34,7 +34,10 @@ def check(condition, message):
 
 
 def isolated_environment(root):
+    home = root / "home"
+    home.mkdir()
     return {
+        "HOME": str(home),
         "PATH": os.environ.get("PATH", os.defpath),
         "TMPDIR": str(root),
         "DSH_HOME": str(root / "dsh"),
@@ -169,13 +172,21 @@ def verify_inventory(launch, cookie):
     print("Host inventory resolved the active row, English and Chinese metadata, and SVG icon")
 
 
-def verify_host(dsh, tarball, root):
+def verify_host(dsh, bundle, root):
     environment = isolated_environment(root)
+    if bundle.is_dir():
+        shutil.copytree(bundle, root / "dist")
+        spec = "./dist"
+        source = "copied bundle directory"
+    else:
+        spec = str(bundle)
+        source = "bundle tarball"
     install = subprocess.run(
-        [dsh, "plugin", "--profile", "web", "add", str(tarball), "--offline", "--ignore-scripts"],
+        [dsh, "plugin", "--profile", "web", "add", spec, "--offline", "--ignore-scripts"],
         cwd=root, env=environment, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30,
     )
-    check(install.returncode == 0, f"Offline tarball installation failed\n{install.stdout}{install.stderr}")
+    check(install.returncode == 0, f"Offline installation of {source} failed\n{install.stdout}{install.stderr}")
+    print(f"Installed {source} offline in an isolated DSH profile")
     log_path = root / "web.log"
     with log_path.open("wb") as log:
         process = subprocess.Popen(
@@ -200,18 +211,18 @@ def verify_host(dsh, tarball, root):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("tarball", type=Path, help="built decision-review package tarball")
+    parser.add_argument("bundle", type=Path, help="built dist directory or decision-review tarball")
     parser.add_argument("--dsh", default="dsh", help="installed DSH executable (default: dsh on PATH)")
     args = parser.parse_args()
     dsh = shutil.which(args.dsh)
     if dsh is None:
         parser.error(f"DSH executable not found: {args.dsh}")
-    tarball = args.tarball.resolve()
-    if not tarball.is_file():
-        parser.error(f"Tarball not found: {tarball}")
+    bundle = args.bundle.resolve()
+    if not bundle.is_file() and not (bundle / "package.json").is_file():
+        parser.error(f"Tarball or package directory not found: {bundle}")
     try:
         with tempfile.TemporaryDirectory(prefix="dsh-decision-review-") as directory:
-            verify_host(str(Path(dsh).absolute()), tarball, Path(directory))
+            verify_host(str(Path(dsh).absolute()), bundle, Path(directory))
     except (VerificationError, OSError, subprocess.TimeoutExpired, ValueError, KeyError) as error:
         parser.exit(1, f"Host verification failed: {error}\n")
 
