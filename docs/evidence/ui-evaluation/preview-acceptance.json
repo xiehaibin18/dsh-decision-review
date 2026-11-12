@@ -1,0 +1,571 @@
+{
+  "status": "passed",
+  "revision": "963452075e9d7e2a47a482f297143af5ed4f76c0",
+  "checks": [
+    {
+      "name": "Chinese/light/wide Decisions and three synthetic smoke results",
+      "details": {
+        "width": 1280,
+        "height": 913,
+        "scrollWidth": 1280,
+        "surfaceWidth": 744
+      }
+    },
+    {
+      "name": "Language/theme/width preserve unsaved draft; real narrow viewport",
+      "details": {
+        "width": 390,
+        "height": 844,
+        "scrollWidth": 390,
+        "surfaceWidth": 366
+      }
+    },
+    {
+      "name": "Successful save and HTTP reload persist normalized values"
+    },
+    {
+      "name": "English/light/narrow Follow session",
+      "details": {
+        "width": 390,
+        "height": 844,
+        "scrollWidth": 390,
+        "surfaceWidth": 366
+      }
+    },
+    {
+      "name": "Config HTTP 503 recovers by restoring endpoint and reloading"
+    },
+    {
+      "name": "Save HTTP 503 preserves draft; recovery and retry succeed"
+    },
+    {
+      "name": "Multiline text survives save/reload byte-for-byte; blank rule blocks save",
+      "details": {
+        "multiline": "  第一行\n\n  npm test -- --runInBand\nlast line | 保留空格  \n"
+      }
+    },
+    {
+      "name": "Keyboard select, focus ring, linked errors, add/remove focus and bilingual narrow rules",
+      "details": {
+        "semantics": {
+          "label": "匹配条件  第一行\n\n  npm test -- --runInBand\nlast line | 保留空格  \n",
+          "required": "true",
+          "descriptions": [
+            "52/400 个字符"
+          ]
+        },
+        "invalid": {
+          "invalid": "true",
+          "descriptions": [
+            "请输入匹配条件。",
+            "0/400 个字符"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Invalid stored route/model require real validation and repair while keeping session engine"
+    },
+    {
+      "name": "Switch during delayed load cancels old scene without stale form"
+    },
+    {
+      "name": "Saving state is visible; model and multiline rule edits made during save are not overwritten"
+    },
+    {
+      "name": "Switch during delayed smoke cancels old results"
+    },
+    {
+      "name": "Test request error recovers; mixed synthetic row error renders"
+    },
+    {
+      "name": "Stats failure recovers on polling; zero-review fixture hides pill"
+    },
+    {
+      "name": "All browser requests remain localhost; no uncaught runtime exceptions"
+    }
+  ],
+  "requests": [
+    {
+      "url": "http://127.0.0.1:60791/",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/_bun/asset/6f33ddd64bb83c2e.css",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/_bun/asset/b488a13114b2f5ba.css",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/_bun/client/index-00000000a5d878c6.js",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/favicon.ico",
+      "method": "GET",
+      "status": 204
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/6ed5606c-8bf3-4605-8659-1810d33e6cde/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/6ed5606c-8bf3-4605-8659-1810d33e6cde/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/6ed5606c-8bf3-4605-8659-1810d33e6cde/decision-review/test",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/6ed5606c-8bf3-4605-8659-1810d33e6cde/decision-review/save",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/6ed5606c-8bf3-4605-8659-1810d33e6cde/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/6ed5606c-8bf3-4605-8659-1810d33e6cde/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/6ed5606c-8bf3-4605-8659-1810d33e6cde",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ce62fe76-9685-470c-a7eb-dca068c247e5/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ce62fe76-9685-470c-a7eb-dca068c247e5/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ce62fe76-9685-470c-a7eb-dca068c247e5",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/da5102e2-0ae1-420a-9626-bd8d9b235396/decision-review/config",
+      "method": "GET",
+      "status": 503
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/da5102e2-0ae1-420a-9626-bd8d9b235396/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/da5102e2-0ae1-420a-9626-bd8d9b235396/recover",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/da5102e2-0ae1-420a-9626-bd8d9b235396/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/da5102e2-0ae1-420a-9626-bd8d9b235396/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/da5102e2-0ae1-420a-9626-bd8d9b235396",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/e09e2032-79dc-4d6c-b72a-ca3512da22d6/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/e09e2032-79dc-4d6c-b72a-ca3512da22d6/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/e09e2032-79dc-4d6c-b72a-ca3512da22d6/decision-review/save",
+      "method": "POST",
+      "status": 503
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/e09e2032-79dc-4d6c-b72a-ca3512da22d6/recover",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/e09e2032-79dc-4d6c-b72a-ca3512da22d6/decision-review/save",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/e09e2032-79dc-4d6c-b72a-ca3512da22d6",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/c6799bf7-49f1-40be-a6ac-6083bb57445c/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/c6799bf7-49f1-40be-a6ac-6083bb57445c/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/c6799bf7-49f1-40be-a6ac-6083bb57445c/decision-review/save",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/c6799bf7-49f1-40be-a6ac-6083bb57445c/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/c6799bf7-49f1-40be-a6ac-6083bb57445c/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/c6799bf7-49f1-40be-a6ac-6083bb57445c/decision-review/save",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/c6799bf7-49f1-40be-a6ac-6083bb57445c",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ed7a7bd9-9946-442f-bde8-dd250930d867/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ed7a7bd9-9946-442f-bde8-dd250930d867/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ed7a7bd9-9946-442f-bde8-dd250930d867/decision-review/save",
+      "method": "POST",
+      "status": 400
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ed7a7bd9-9946-442f-bde8-dd250930d867/decision-review/save",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ed7a7bd9-9946-442f-bde8-dd250930d867",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/44200dd5-031d-4a70-8361-091af25b9dc3/decision-review/config",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/44200dd5-031d-4a70-8361-091af25b9dc3/decision-review/stats?session=preview",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/44200dd5-031d-4a70-8361-091af25b9dc3",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/dadf1107-1858-4567-af72-10089c18e3da/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/dadf1107-1858-4567-af72-10089c18e3da/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/dadf1107-1858-4567-af72-10089c18e3da",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/2b6bc940-50a3-4ac5-ad7d-0878c0f4beeb/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/2b6bc940-50a3-4ac5-ad7d-0878c0f4beeb/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/2b6bc940-50a3-4ac5-ad7d-0878c0f4beeb/decision-review/save",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/2b6bc940-50a3-4ac5-ad7d-0878c0f4beeb/decision-review/stats?session=preview",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/2b6bc940-50a3-4ac5-ad7d-0878c0f4beeb/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/2b6bc940-50a3-4ac5-ad7d-0878c0f4beeb/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/2b6bc940-50a3-4ac5-ad7d-0878c0f4beeb/decision-review/test",
+      "method": "POST",
+      "status": 499
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/2b6bc940-50a3-4ac5-ad7d-0878c0f4beeb",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/3dde2dba-1093-4a9b-aabc-18b59c78a5e7/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/3dde2dba-1093-4a9b-aabc-18b59c78a5e7/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/3dde2dba-1093-4a9b-aabc-18b59c78a5e7",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/74b529a7-1eaa-4805-a463-dd498c37ffee/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/74b529a7-1eaa-4805-a463-dd498c37ffee/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/74b529a7-1eaa-4805-a463-dd498c37ffee/decision-review/test",
+      "method": "POST",
+      "status": 503
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/74b529a7-1eaa-4805-a463-dd498c37ffee/recover",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/74b529a7-1eaa-4805-a463-dd498c37ffee/decision-review/test",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/74b529a7-1eaa-4805-a463-dd498c37ffee",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/e9630072-08d3-4e6f-a548-a130a2d4fddf/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/e9630072-08d3-4e6f-a548-a130a2d4fddf/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/e9630072-08d3-4e6f-a548-a130a2d4fddf/decision-review/test",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/e9630072-08d3-4e6f-a548-a130a2d4fddf",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ec13a45f-53c8-4873-bf80-1ffc63da1cc3/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ec13a45f-53c8-4873-bf80-1ffc63da1cc3/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 503
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ec13a45f-53c8-4873-bf80-1ffc63da1cc3/recover",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ec13a45f-53c8-4873-bf80-1ffc63da1cc3/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/ec13a45f-53c8-4873-bf80-1ffc63da1cc3",
+      "method": "DELETE",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/9c27c456-d899-4da7-9da8-26f3acadc3fe/decision-review/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "url": "http://127.0.0.1:60791/api/preview/sessions/9c27c456-d899-4da7-9da8-26f3acadc3fe/decision-review/stats?session=preview",
+      "method": "GET",
+      "status": 200
+    }
+  ],
+  "console": [
+    {
+      "type": "info",
+      "args": [
+        "%cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools",
+        "font-weight:bold"
+      ]
+    },
+    {
+      "type": "info",
+      "args": [
+        "[Bun] Hot-module-reloading socket connected, waiting for changes..."
+      ]
+    },
+    {
+      "type": "warning",
+      "args": [
+        "[decision-review] dock pill fetch failed:",
+        {
+          "type": "object",
+          "subtype": "error",
+          "className": "Error",
+          "description": "Error: HTTP 503\n    at Object.getStats (http://127.0.0.1:60791/_bun/client/index-00000000a5d878c6.js:2799:19)\n    at async tick (http://127.0.0.1:60791/_bun/client/index-00000000a5d878c6.js:3594:27)",
+          "objectId": "-8869405910245399886.3.1",
+          "preview": {
+            "type": "object",
+            "subtype": "error",
+            "description": "Error: HTTP 503\n    at Object.getStats (http://127.0.0.1:60791/_bun/client/index-00000000a5d878c6.js:2799:19)\n    at async tick (http://127.0.0.1:60791/_bun/client/index-00000000a5d878c6.js:3594:27)",
+            "overflow": false,
+            "properties": [
+              {
+                "name": "stack",
+                "type": "string",
+                "value": "Error: HTTP 503\n    at Object.getStats (http://127…91/_bun/client/index-00000000a5d878c6.js:3594:27)"
+              },
+              {
+                "name": "message",
+                "type": "string",
+                "value": "HTTP 503"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "navigations": 1,
+  "failures": []
+}

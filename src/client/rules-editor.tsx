@@ -7,10 +7,8 @@ import {
   RULE_VERDICTS,
   type ReviewEngine,
 } from '../shared/contracts.js'
-import { Field } from './components.js'
 import type { Translate } from './messages.js'
 import { conditionProblem, isRuleVerdict, type DraftRule, type RuleChanges, type validateRules } from './rules.js'
-import { BORDER, BUTTON, CARD, DANGER, ERROR_NOTE, HEADING, INPUT, NOTE, ROW, STACK, buttonStyle } from './styles.js'
 
 interface RuleEditorProps {
   t: Translate
@@ -20,10 +18,21 @@ interface RuleEditorProps {
   onRemove: () => void
   showMissing: boolean
   autoFocus: boolean
+  conditionRef: React.Ref<HTMLTextAreaElement>
   baseId: string
 }
 
-function RuleEditor({ t, rule, index, onChange, onRemove, showMissing, autoFocus, baseId }: RuleEditorProps) {
+function RuleEditor({
+  t,
+  rule,
+  index,
+  onChange,
+  onRemove,
+  showMissing,
+  autoFocus,
+  conditionRef,
+  baseId,
+}: RuleEditorProps) {
   const n = index + 1
   const headingId = baseId + '-heading'
   const lengthId = baseId + '-length'
@@ -34,70 +43,76 @@ function RuleEditor({ t, rule, index, onChange, onRemove, showMissing, autoFocus
   const verdictInvalid = !isRuleVerdict(rule.verdict)
 
   return (
-    <section aria-labelledby={headingId} style={CARD}>
-      <div style={{ ...ROW, justifyContent: 'space-between' }}>
-        <h3 id={headingId} style={{ ...HEADING, fontSize: 13 }}>
-          {t('rules.item', { n })}
-        </h3>
+    <section aria-labelledby={headingId} className="decision-review-rule">
+      <div className="decision-review-rule-header">
+        <h3 id={headingId}>{t('rules.item', { n })}</h3>
         <button
           type="button"
           onClick={onRemove}
           aria-label={t('rules.remove.named', { n })}
-          style={{ ...BUTTON, padding: '4px 9px', background: 'transparent' }}
+          className="decision-review-rules-button decision-review-rule-remove"
         >
           {t('rules.remove')}
         </button>
       </div>
-      <Field label={t('rules.verdict.label')}>
-        <select
-          value={verdictInvalid ? '' : rule.verdict}
-          onChange={(event) => onChange({ verdict: event.target.value })}
-          aria-invalid={verdictInvalid || undefined}
-          aria-describedby={verdictInvalid ? verdictErrorId : undefined}
-          style={INPUT}
-        >
-          {verdictInvalid && (
-            <option value="" disabled>
-              {t('rules.error.verdict')}
-            </option>
-          )}
-          {RULE_VERDICTS.map((verdict) => (
-            <option value={verdict} key={verdict}>
-              {t(`rules.verdict.${verdict}`)}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {verdictInvalid && (
-        <div id={verdictErrorId} style={ERROR_NOTE}>
-          {t('rules.error.verdict')}
-        </div>
-      )}
-      <Field label={t('rules.condition.label')}>
-        <textarea
-          value={rule.condition}
-          onChange={(event) => onChange({ condition: event.target.value })}
-          placeholder={t('rules.condition.placeholder')}
-          rows={3}
-          autoFocus={autoFocus}
-          aria-required
-          aria-invalid={conditionError ? true : undefined}
-          aria-describedby={lengthId + (conditionError ? ' ' + conditionErrorId : '')}
-          style={{ ...INPUT, resize: 'vertical', borderColor: conditionError ? DANGER : BORDER }}
-        />
-      </Field>
-      <div style={{ ...ROW, justifyContent: 'space-between', alignItems: 'baseline', marginTop: -4 }}>
-        {conditionError && (
-          <span id={conditionErrorId} style={ERROR_NOTE}>
-            {t(conditionError, { max: RULE_MAX_CONDITION })}
-          </span>
+      <div className="decision-review-rule-field">
+        <label className="decision-review-rule-label">
+          <span>{t('rules.verdict.label')}</span>
+          <select
+            value={verdictInvalid ? '' : rule.verdict}
+            onChange={(event) => onChange({ verdict: event.target.value })}
+            aria-invalid={verdictInvalid || undefined}
+            aria-describedby={verdictInvalid ? verdictErrorId : undefined}
+            className="decision-review-rule-input decision-review-rule-verdict"
+          >
+            {verdictInvalid && (
+              <option value="" disabled>
+                {t('rules.error.verdict')}
+              </option>
+            )}
+            {RULE_VERDICTS.map((verdict) => (
+              <option value={verdict} key={verdict}>
+                {t(`rules.verdict.${verdict}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {verdictInvalid && (
+          <p id={verdictErrorId} className="decision-review-rules-note" data-error>
+            {t('rules.error.verdict')}
+          </p>
         )}
-        <span
-          id={lengthId}
-          style={{ ...(problem === 'rules.error.long' ? ERROR_NOTE : NOTE), marginInlineStart: 'auto' }}
-        >
-          {t('rules.condition.length', { count: rule.condition.length, max: RULE_MAX_CONDITION })}
-        </span>
+      </div>
+      <div className="decision-review-rule-field">
+        <label className="decision-review-rule-label">
+          <span>{t('rules.condition.label')}</span>
+          <textarea
+            ref={conditionRef}
+            value={rule.condition}
+            onChange={(event) => onChange({ condition: event.target.value })}
+            placeholder={t('rules.condition.placeholder')}
+            rows={4}
+            autoFocus={autoFocus}
+            aria-required
+            aria-invalid={conditionError ? true : undefined}
+            aria-describedby={conditionError ? conditionErrorId + ' ' + lengthId : lengthId}
+            className="decision-review-rule-input decision-review-rule-condition"
+          />
+        </label>
+        <div className="decision-review-rule-details">
+          {conditionError && (
+            <span id={conditionErrorId} className="decision-review-rules-note" data-error>
+              {t(conditionError, { max: RULE_MAX_CONDITION })}
+            </span>
+          )}
+          <span
+            id={lengthId}
+            className="decision-review-rules-note decision-review-rule-count"
+            data-error={problem === 'rules.error.long' || undefined}
+          >
+            {t('rules.condition.length', { count: rule.condition.length, max: RULE_MAX_CONDITION })}
+          </span>
+        </div>
       </div>
     </section>
   )
@@ -127,53 +142,82 @@ export function RulesEditor({
   lastAddedId,
 }: RulesEditorProps) {
   const sectionId = React.useId()
+  const addButton = React.useRef<HTMLButtonElement>(null)
+  const conditions = React.useRef(new Map<number, HTMLTextAreaElement>())
   const atCountLimit = rules.length >= RULE_MAX_COUNT
   const { total, countInvalid, totalInvalid } = validation
-  const add = (
-    <button type="button" disabled={atCountLimit} style={buttonStyle(atCountLimit)} onClick={onAdd}>
-      <span aria-hidden>+ </span>
-      {t('rules.add')}
-    </button>
-  )
+
+  function removeRule(id: number, index: number) {
+    const adjacent = rules[index + 1] ?? rules[index - 1]
+    const target = adjacent ? conditions.current.get(adjacent.id) : addButton.current
+    onRemove(id)
+    target?.focus()
+  }
 
   return (
-    <section aria-labelledby={sectionId} style={{ ...STACK, borderTop: '1px solid ' + BORDER, paddingTop: 14 }}>
-      <div style={{ display: 'grid', gap: 5 }}>
-        <h2 id={sectionId} style={HEADING}>
-          {t('rules.title')}
-        </h2>
-        <p style={NOTE}>{t('rules.hint')}</p>
-        <p style={NOTE}>{t(`rules.engine.${engine}`)}</p>
-      </div>
-      <p style={countInvalid || totalInvalid ? ERROR_NOTE : NOTE}>
-        {t('rules.summary', { count: rules.length, maxCount: RULE_MAX_COUNT, total, maxTotal: RULE_MAX_TOTAL })}
-      </p>
-      {countInvalid && <div style={ERROR_NOTE}>{t('rules.error.count', { max: RULE_MAX_COUNT })}</div>}
-      {totalInvalid && <div style={ERROR_NOTE}>{t('rules.error.total', { max: RULE_MAX_TOTAL })}</div>}
-      {rules.length === 0 ? (
-        <div style={{ ...CARD, borderStyle: 'dashed', padding: 16 }}>
-          <div style={{ fontWeight: 600 }}>{t('rules.empty.title')}</div>
-          <p style={NOTE}>{t('rules.empty.desc')}</p>
-          <div style={ROW}>{add}</div>
+    <section aria-labelledby={sectionId} className="decision-review-rules">
+      <header className="decision-review-rules-intro">
+        <div className="decision-review-rules-heading">
+          <h2 id={sectionId}>{t('rules.title')}</h2>
+          <p
+            className="decision-review-rules-note decision-review-rules-summary"
+            data-error={countInvalid || totalInvalid || undefined}
+          >
+            {t('rules.summary', { count: rules.length, maxCount: RULE_MAX_COUNT, total, maxTotal: RULE_MAX_TOTAL })}
+          </p>
         </div>
-      ) : (
-        <>
-          {rules.map((rule, index) => (
-            <RuleEditor
-              key={rule.id}
-              baseId={sectionId + '-rule-' + rule.id}
-              t={t}
-              rule={rule}
-              index={index}
-              showMissing={showMissing}
-              autoFocus={rule.id === lastAddedId}
-              onChange={(changes) => onChange(rule.id, changes)}
-              onRemove={() => onRemove(rule.id)}
-            />
-          ))}
-          <div style={ROW}>{add}</div>
-        </>
+        <p>{t('rules.hint')}</p>
+        <p className="decision-review-rules-note">{t(`rules.engine.${engine}`)}</p>
+      </header>
+      {countInvalid && (
+        <p className="decision-review-rules-note" data-error>
+          {t('rules.error.count', { max: RULE_MAX_COUNT })}
+        </p>
       )}
+      {totalInvalid && (
+        <p className="decision-review-rules-note" data-error>
+          {t('rules.error.total', { max: RULE_MAX_TOTAL })}
+        </p>
+      )}
+      <div className="decision-review-rules-body" data-empty={rules.length === 0 || undefined}>
+        {rules.length === 0 ? (
+          <div className="decision-review-rules-intro">
+            <h3>{t('rules.empty.title')}</h3>
+            <p className="decision-review-rules-note">{t('rules.empty.desc')}</p>
+          </div>
+        ) : (
+          <ol className="decision-review-rules-list" role="list">
+            {rules.map((rule, index) => (
+              <li key={rule.id}>
+                <RuleEditor
+                  baseId={sectionId + '-rule-' + rule.id}
+                  t={t}
+                  rule={rule}
+                  index={index}
+                  showMissing={showMissing}
+                  autoFocus={rule.id === lastAddedId}
+                  conditionRef={(control) => {
+                    if (control) conditions.current.set(rule.id, control)
+                    else conditions.current.delete(rule.id)
+                  }}
+                  onChange={(changes) => onChange(rule.id, changes)}
+                  onRemove={() => removeRule(rule.id, index)}
+                />
+              </li>
+            ))}
+          </ol>
+        )}
+        <button
+          ref={addButton}
+          type="button"
+          disabled={atCountLimit}
+          className="decision-review-rules-button decision-review-rules-add"
+          onClick={onAdd}
+        >
+          <span aria-hidden>+ </span>
+          {t('rules.add')}
+        </button>
+      </div>
     </section>
   )
 }

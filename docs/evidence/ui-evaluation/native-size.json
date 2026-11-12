@@ -1,0 +1,12 @@
+{
+  "baseline": {
+    "bytes": 44443,
+    "gzipBytes": 12460,
+    "sha256": "2ef50bbaa2acf9f56f33d9083582bc1022f108d8d8bbd5d01e52a5b445bc7796"
+  },
+  "prototype": {
+    "bytes": 50401,
+    "gzipBytes": 13531,
+    "sha256": "3751bcfad0ca69db590d319ca7b2faefdf0be6014db2eba150c99fe86b56d916"
+  }
+}
