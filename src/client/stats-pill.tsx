@@ -56,7 +56,10 @@ export function ApprovalStatsPill({ t, sessionId, api }: PillProps) {
   }
   const { stats } = reading
   if (!stats?.reviewed) return null
-  const rate = stats.passRate === null ? '—' : stats.passRate
+  const label =
+    stats.passRate === null
+      ? t('pill.label.unavailable', { n: stats.reviewed })
+      : t('pill.label', { n: stats.reviewed, p: stats.passRate })
 
   return (
     <span
@@ -64,7 +67,8 @@ export function ApprovalStatsPill({ t, sessionId, api }: PillProps) {
         n: stats.reviewed,
         auto: stats.autoAllowed,
         asked: stats.asked,
-        denied: stats.finalDenied + stats.failed,
+        denied: stats.finalDenied,
+        failed: stats.failed,
       })}
       style={{
         display: 'inline-flex',
@@ -96,7 +100,7 @@ export function ApprovalStatsPill({ t, sessionId, api }: PillProps) {
           strokeLinejoin="round"
         />
       </svg>
-      <span>{t('pill.label', { n: stats.reviewed, p: rate })}</span>
+      <span>{label}</span>
     </span>
   )
 }

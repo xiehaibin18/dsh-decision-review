@@ -10,7 +10,7 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { decisionsClassifyRisk } from './decisions-engine.js'
-import { askUser, denied, failed, settingsInvalidDecision } from './review-outcome.js'
+import { AUTO_PRESENTATION, askUser, denied, failed, settingsInvalidDecision } from './review-outcome.js'
 import { guarded, reviewRoutes } from './routes.js'
 import { sessionClassifyRisk } from './session-engine.js'
 import { loadSettings, SETTINGS_FILE } from './settings.js'
@@ -28,16 +28,6 @@ export const name = 'decision-review'
 export const inject = ['approval', 'llm', 'permissionPresets', 'sessions', 'tools', 'workingDirectory']
 
 const AUTO_PRESET = 'auto'
-const AUTO_PRESENTATION = {
-  description: {
-    en: 'Decision Review checks tool calls with the configured Decisions or Session engine.',
-    zh: '决策评审使用已配置的 Decisions 或 Session 引擎审核工具调用。',
-  },
-  confirmationDescription: {
-    en: 'Auto permits full host access after tool-call review. Decision Review uses the engine selected on its settings page: Decisions sends complete review input to the configured API endpoint and reviewer model; Session uses this session’s model route. The Decisions reviewer can differ from the agent’s model.',
-    zh: 'Auto 在工具调用通过评审后允许完整的宿主访问权限。决策评审使用设置页选定的引擎：Decisions 将完整评审输入发送到配置的 API 地址和评审模型；Session 使用当前会话的模型路由。Decisions 评审模型可以与当前 agent 的模型不同。',
-  },
-}
 // FiberState.ACTIVE in the host's Cordis runtime. Profile bundles cannot import it.
 const CORDIS_FIBER_ACTIVE = 2
 const RUN_CODE_NAME = 'run_code'
@@ -118,7 +108,7 @@ export function apply(ctx: Context): void {
               ? {
                   ok: true as const,
                   value: {
-                    decision: settingsInvalidDecision(problems),
+                    decision: settingsInvalidDecision(problems.map(({ detail }) => detail)),
                     telemetry: { ms: 0, answers: null, usage: null },
                   },
                 }
@@ -270,7 +260,7 @@ export function apply(ctx: Context): void {
 
   if (holder.problems.length > 0) {
     console.warn(
-      `[decision-review] review is STOPPED and calls that need it are denied until valid settings are saved from the plugin page: ${holder.problems.join('; ')}`,
+      `[decision-review] review is STOPPED and calls that need it are denied until valid settings are saved from the plugin page: ${holder.problems.map(({ detail }) => detail).join('; ')}`,
     )
   }
   console.info(`[decision-review] ready: engine=${holder.settings.engine} endpoint=${holder.settings.endpoint}`)

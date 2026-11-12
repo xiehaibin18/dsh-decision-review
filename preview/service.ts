@@ -3,10 +3,17 @@ import {
   TEST_SCENARIO_NAMES,
   type ConfigResponse,
   type SaveResponse,
+  type SettingsIssue,
   type TestResponse,
 } from '../src/shared/contracts.js'
 import { isRecord } from '../src/server/json.js'
-import { mergeSettingsUpdate, normalizeSettings, publicSettings, type StoredSettings } from '../src/server/settings.js'
+import {
+  mergeSettingsUpdate,
+  normalizeSettings,
+  publicSettings,
+  SettingsValidationError,
+  type StoredSettings,
+} from '../src/server/settings.js'
 import { fixtureSettings, fixtureStats, fixtureTest } from './fixtures.js'
 import { isSceneId, type PreviewSession } from './scenes.js'
 
@@ -20,6 +27,7 @@ class PreviewError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly issue?: SettingsIssue,
   ) {
     super(message)
   }
@@ -108,7 +116,7 @@ export function createPreviewService() {
       case 'config':
         return json({
           settings: publicSettings(stored.settings),
-          problems: stored.problems,
+          problems: stored.problems.map(({ issue }) => issue),
           runtime: { engine: stored.settings.engine, accepting: true, active: 0, paused: stored.problems.length > 0 },
         } satisfies ConfigResponse)
       case 'save': {
@@ -117,7 +125,8 @@ export function createPreviewService() {
         try {
           settings = normalizeSettings(mergeSettingsUpdate(stored.settings, body.settings), { strict: true })
         } catch (error) {
-          throw new PreviewError(400, error instanceof Error ? error.message : String(error))
+          if (!(error instanceof SettingsValidationError)) throw error
+          throw new PreviewError(400, error.message, error.issue)
         }
         session.stored = { settings, problems: [], damaged: false }
         return json({ ok: true, settings: publicSettings(settings), problems: [] } satisfies SaveResponse)
@@ -138,7 +147,9 @@ export function createPreviewService() {
           )
         }
         if (stored.problems.length > 0)
-          throw new PreviewError(409, 'Fix the stored settings before testing the Decisions API')
+          throw new PreviewError(409, 'Fix the stored settings before testing the Decisions API', {
+            code: 'stored_invalid',
+          })
         return json({
           ok: true,
           results: names.map((name) => fixtureTest(stored.settings, name, session.scene === 'test-mixed')),
@@ -160,7 +171,10 @@ export function createPreviewService() {
         if (error instanceof Error && error.name === 'AbortError')
           return json({ error: 'Preview request cancelled' }, 499)
         return json(
-          { error: error instanceof Error ? error.message : String(error) },
+          {
+            error: error instanceof Error ? error.message : String(error),
+            issue: error instanceof PreviewError ? error.issue : undefined,
+          },
           error instanceof PreviewError ? error.status : 500,
         )
       }

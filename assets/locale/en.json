@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Decision Review",
-    "description": "Review tool calls with the independent OpenAI Decisions API or with the model used by the current session."
+    "description": "Review tool calls in Auto mode using a separate Decisions API or the current session’s model."
   }
 }

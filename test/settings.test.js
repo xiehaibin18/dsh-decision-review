@@ -85,7 +85,7 @@ describe('thresholds', () => {
     const problems = []
     expect(normalizeSettings({ tAuth }, { problems }).tAuth).toBe(0.7)
     expect(problems).toHaveLength(1)
-    expect(problems[0]).not.toContain('abc')
+    expect(problems[0].detail).not.toContain('abc')
   })
 })
 
@@ -133,7 +133,7 @@ describe('rules', () => {
     )
     expect(settings.rules).toStrictEqual([{ condition: 'ok', verdict: 'ask' }])
     expect(problems).toHaveLength(1)
-    expect(problems[0]).toMatch(/stored rule 1 was dropped/)
+    expect(problems[0].detail).toMatch(/stored rule 1 was dropped/)
   })
 })
 

@@ -33,7 +33,7 @@ describe('configuration panel', () => {
   }
 
   const text = () => client.container.textContent
-  const copy = (key, params) => client.translate(key, params)
+  const copy = (key, params) => client.translate(key, key === 'test.run' ? { count: 3 } : params)
   const shown = (key, params) => expect(text()).toContain(copy(key, params))
   const hidden = (key, params) => expect(text()).not.toContain(copy(key, params))
   const button = (key, params) => client.button(copy(key, params))
@@ -128,13 +128,13 @@ describe('configuration panel', () => {
     }
 
     test.serial('explains why automatic review is paused', async () => {
-      await open(['stored tConf is not a number in [0,1]; the default 0.75 is shown'])
+      await open([{ code: 'threshold', params: { field: 'tConf' } }])
       shown('problems.title')
-      expect(text()).toMatch(/stored tConf is not a number/)
+      expect(text()).toContain('tConf must be a number from 0 to 1.')
     })
 
     test.serial('shows paused review until valid settings are saved', async () => {
-      await open(['stored tConf is not a number in [0,1]; the default 0.75 is shown'])
+      await open([{ code: 'threshold', params: { field: 'tConf' } }])
       shown('runtime.status', { state: copy('runtime.paused') })
       hidden('runtime.status', { state: copy('runtime.accepting') })
       await change('model.label', 'model-b')
@@ -151,7 +151,7 @@ describe('configuration panel', () => {
 
     test.serial('repairs an invalid stored Decisions endpoint without switching the Session engine', async () => {
       serverSettings = { ...serverSettings, engine: 'session', endpoint: '' }
-      await open(['stored endpoint is not a valid HTTPS URL; an empty field is shown'])
+      await open([{ code: 'endpoint' }])
       expect(field('engine.label').value).toBe('session')
       shown('engine.repair')
       expect(field('endpoint.label').value).toBe('')
@@ -321,10 +321,10 @@ describe('configuration panel', () => {
       await click('rules.add')
       await condition('Deny production deploys')
       await change('rules.verdict.label', 'deny')
-      expect(text()).toMatch(/matched “Deny” rule always stops the call/)
+      expect(text()).toMatch(/“Deny” always blocks a matched call/)
       await change('engine.label', 'session')
-      expect(text()).toMatch(/any refusal still follows your setting for reviewer denials/)
-      expect(text()).not.toMatch(/always stops the call/)
+      expect(text()).toMatch(/the approval setting above still applies/)
+      expect(text()).not.toMatch(/always blocks a matched call/)
       expect(button('test.run').disabled).toBe(true)
       expect(field('rules.condition.label').value).toBe('Deny production deploys')
       expect(field('rules.verdict.label').value).toBe('deny')
@@ -344,21 +344,21 @@ describe('configuration panel', () => {
 
       await render()
       expect(text()).toMatch(/Rules: 0\/20 · Condition characters: 0\/2000/)
-      expect(text()).toMatch(/tConf — Minimum classification confidence/)
-      expect(text()).toMatch(/tHighPred — Data exfiltration threshold for high-risk classification/)
-      expect(text()).toMatch(/tMedPred — Weak signal threshold for medium risk/)
-      expect(text()).toMatch(/tStrongPred — Strong signal threshold for medium risk/)
-      expect(text()).toMatch(/tAuth — Authorization threshold for allowing medium risk/)
+      expect(text()).toMatch(/tConf — Minimum confidence for risk classification and rule matches/)
+      expect(text()).toMatch(/tHighPred — Data exfiltration score that triggers high risk/)
+      expect(text()).toMatch(/tMedPred — Medium risk signal when classification confidence is low/)
+      expect(text()).toMatch(/tStrongPred — Medium risk signal on its own/)
+      expect(text()).toMatch(/tAuth — Minimum explicit authorization score/)
       expect(text()).not.toMatch(/\p{Script=Han}/u)
 
       client.language = 'zh'
       await render()
       expect(text()).toMatch(/规则：0\/20 条 · 条件总长：0\/2000 个字符/)
-      expect(text()).toMatch(/tConf — 分类置信度下限/)
-      expect(text()).toMatch(/tHighPred — 数据外传高风险判定阈值/)
-      expect(text()).toMatch(/tMedPred — 中风险弱信号阈值/)
-      expect(text()).toMatch(/tStrongPred — 中风险强信号阈值/)
-      expect(text()).toMatch(/tAuth — 中风险放行的授权阈值/)
+      expect(text()).toMatch(/tConf — 风险分类和规则匹配的最低置信度/)
+      expect(text()).toMatch(/tHighPred — 数据外传触发高风险的分数/)
+      expect(text()).toMatch(/tMedPred — 分类置信度不足时的中风险信号阈值/)
+      expect(text()).toMatch(/tStrongPred — 单凭信号触发中风险的分数/)
+      expect(text()).toMatch(/tAuth — 明确授权的最低分数/)
     })
 
     test.serial('switches localized smoke results in place, including the server reason', async () => {

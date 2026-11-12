@@ -27,6 +27,35 @@ describe('built client in a simulated DSH host', () => {
     }
   })
 
+  test.serial('localizes a real settings validation error without submitting again', async () => {
+    profileDir = makeProfileDir()
+    host = makeHost({ profileContext: { name: 'test', dir: profileDir } })
+    apply(host.ctx)
+    const paths = []
+    client = createClient(async (path, init) => {
+      paths.push(path)
+      const url = new URL(path, CLIENT_ORIGIN)
+      return host.routes.get(url.pathname).fetch(new Request(url, init))
+    })
+    client.load()
+    client.language = 'zh'
+    await client.render(CONFIG_SLOT, { view: 'page' })
+    const endpoint = [...client.container.querySelectorAll('label')]
+      .find((label) => label.textContent.startsWith('Decisions API 地址'))
+      .querySelector('input')
+    await client.change(endpoint, 'invalid-endpoint')
+    await act(async () => client.button('保存').click())
+    const error = () => client.container.querySelector('[role="alert"]').textContent
+    expect(error()).toContain('Decisions API 地址必须是')
+    expect(error()).not.toContain('invalid-endpoint')
+
+    client.language = 'en'
+    await client.render(CONFIG_SLOT, { view: 'page' })
+    expect(error()).toContain('The Decisions API URL must be')
+    expect(endpoint.value).toBe('invalid-endpoint')
+    expect(paths).toEqual(['/api/decision-review/config', '/api/decision-review/save'])
+  })
+
   test.serial('saves and reloads settings through the real host routes', async () => {
     const endpoint = 'https://decisions.example.test/v1/decisions'
     const storedKey = 'test-only-stored-key'
@@ -84,7 +113,7 @@ describe('built client in a simulated DSH host', () => {
     const verdict = () => rule().closest('section').querySelector('select')
 
     await client.render(CONFIG_SLOT, { view: 'page' })
-    expect(container.textContent).toMatch(/Authorization review/)
+    expect(container.textContent).toMatch(/Decision Review/)
     expect(password().value).toBe('')
     expect(password().placeholder).toMatch(/saved/)
     expect(button('Run smoke test (3 scenarios)').disabled).toBe(false)
@@ -107,7 +136,7 @@ describe('built client in a simulated DSH host', () => {
     startHost()
     client.language = 'zh'
     await client.render(CONFIG_SLOT, { view: 'page' })
-    expect(container.textContent).toMatch(/授权评审/)
+    expect(container.textContent).toMatch(/决策评审/)
     expect(rule().value).toBe(condition)
     expect(verdict().value).toBe('deny')
     expect(password().value).toBe('')
@@ -217,7 +246,7 @@ describe('composer approval stats pill', () => {
     expect(fetchStats).toHaveBeenCalledTimes(2)
     expect(client.container.textContent).toBe('6 reviewed · 50% auto-passed')
     expect(client.container.querySelector('[title]').title).toBe(
-      'Auto review this session: 6 calls · 3 auto-passed · 1 asked · 2 denied',
+      'Auto review this session: 6 calls · 3 auto-passed · 1 sent for approval · 1 blocked · Review failures: 1',
     )
 
     hidden = true

@@ -97,7 +97,7 @@ describe('decisions engine through the approval entry point', () => {
     )
     const result = await review({ kind: 'allow' })
     expect(result.kind).toBe('ask')
-    expect(result.displayReason.en).toMatch(/did not explicitly request/)
+    expect(result.displayReason.en).toMatch(/explicit authorization score.*below the threshold/)
   })
 
   describe('operator deny rules', () => {

@@ -7,7 +7,7 @@ import type { SceneId } from './scenes.js'
 export const MULTILINE_RULE = '  仅运行本地测试\n\n  npm test -- --runInBand\n保留缩进与末尾换行。\n'
 
 export function fixtureSettings(scene: SceneId): StoredSettings {
-  const problems: string[] = []
+  const problems: StoredSettings['problems'] = []
   const settings = normalizeSettings(
     {
       engine: scene === 'session' || scene === 'invalid' ? 'session' : 'decisions',
