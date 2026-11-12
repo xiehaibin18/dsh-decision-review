@@ -92,3 +92,7 @@ dsh plugin --profile YOUR_PROFILE add ./artifacts/local-decision-review-0.1.0.tg
 ## 独立 UI 开发
 
 使用 `bun run dev` 启动仅绑定 `127.0.0.1` 的预览；可用 `PREVIEW_PORT=0` 自动选择空闲端口。具体场景、热更新语义、组件边界、类型声明补丁和浏览器验收命令见[独立预览说明](preview.md)。安装包验收同时运行源码侧预览测试；已安装字节回归只运行生产业务与测试防线用例，预览服务不会进入消费目录。
+
+## UI 选型原型
+
+规则编辑器的局部 UI 与样式评估见 [UI 组件与样式选型验证](ui-style-evaluation.md)。该分支原型采用原生 React 控件和插件作用域 CSS；Base UI 完成隔离类型/构建探针，shadcn 与 Tailwind 为文档比较。它不代表全量接入或部署已获批准。

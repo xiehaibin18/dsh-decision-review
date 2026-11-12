@@ -1,0 +1,280 @@
+{
+  "bun_revision": "963452075e9d7e2a47a482f297143af5ed4f76c0",
+  "platform": "darwin-arm64",
+  "fixture_lock_sha256": "98c2b98f5bb427a47d0fbb9993507c278c2cb35a77f7848e01013246c7313fd0",
+  "pins": {
+    "@base-ui/react": "1.9.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7"
+  },
+  "installation": {
+    "installed_package_count": 18,
+    "installed_versions": {
+      "@babel/runtime": "8.1.2",
+      "@base-ui/react": "1.9.0",
+      "@base-ui/utils": "0.5.0",
+      "@floating-ui/core": "1.8.0",
+      "@floating-ui/dom": "1.8.0",
+      "@floating-ui/react-dom": "2.1.9",
+      "@floating-ui/utils": "0.2.12",
+      "@types/prop-types": "15.7.15",
+      "@types/react": "18.3.31",
+      "@types/react-dom": "18.3.7",
+      "csstype": "3.2.3",
+      "js-tokens": "4.0.0",
+      "loose-envify": "1.4.0",
+      "react": "18.3.1",
+      "react-dom": "18.3.1",
+      "reselect": "5.3.0",
+      "scheduler": "0.23.2",
+      "use-sync-external-store": "1.7.0"
+    },
+    "base_ui": {
+      "version": "1.9.0",
+      "license": "MIT",
+      "engines": {
+        "node": ">=14.0.0"
+      },
+      "dependencies": {
+        "@babel/runtime": "^7.29.7 || ^8.0.0",
+        "@base-ui/utils": "0.5.0",
+        "@floating-ui/react-dom": "^2.1.9",
+        "@floating-ui/utils": "^0.2.12",
+        "use-sync-external-store": "^1.7.0"
+      },
+      "peer_dependencies": {
+        "@date-fns/tz": "^1.2.0",
+        "@types/react": "^17 || ^18 || ^19",
+        "date-fns": "^4.0.0",
+        "react": "^17 || ^18 || ^19",
+        "react-dom": "^17 || ^18 || ^19"
+      },
+      "peer_dependencies_meta": {
+        "@date-fns/tz": {
+          "optional": true
+        },
+        "@types/react": {
+          "optional": true
+        },
+        "date-fns": {
+          "optional": true
+        }
+      },
+      "runtime_transitive_package_count_excluding_peers": 8,
+      "runtime_transitive_packages_excluding_peers": [
+        "@babel/runtime",
+        "@base-ui/utils",
+        "@floating-ui/core",
+        "@floating-ui/dom",
+        "@floating-ui/react-dom",
+        "@floating-ui/utils",
+        "reselect",
+        "use-sync-external-store"
+      ],
+      "packages_absent_from_project_lock": [
+        "@babel/runtime",
+        "@base-ui/react",
+        "@base-ui/utils",
+        "@floating-ui/core",
+        "@floating-ui/dom",
+        "@floating-ui/react-dom",
+        "@floating-ui/utils",
+        "reselect",
+        "use-sync-external-store"
+      ]
+    },
+    "react_peer_resolutions": [
+      {
+        "from": "@base-ui/react",
+        "peer": "react",
+        "package_manifest": "node_modules/react/package.json"
+      },
+      {
+        "from": "@base-ui/react",
+        "peer": "react-dom",
+        "package_manifest": "node_modules/react-dom/package.json"
+      },
+      {
+        "from": "@base-ui/react",
+        "peer": "@types/react",
+        "package_manifest": "node_modules/@types/react/package.json"
+      },
+      {
+        "from": "@base-ui/utils",
+        "peer": "react",
+        "package_manifest": "node_modules/react/package.json"
+      },
+      {
+        "from": "@base-ui/utils",
+        "peer": "react-dom",
+        "package_manifest": "node_modules/react-dom/package.json"
+      },
+      {
+        "from": "@base-ui/utils",
+        "peer": "@types/react",
+        "package_manifest": "node_modules/@types/react/package.json"
+      },
+      {
+        "from": "@floating-ui/react-dom",
+        "peer": "react",
+        "package_manifest": "node_modules/react/package.json"
+      },
+      {
+        "from": "@floating-ui/react-dom",
+        "peer": "react-dom",
+        "package_manifest": "node_modules/react-dom/package.json"
+      },
+      {
+        "from": "@types/react-dom",
+        "peer": "@types/react",
+        "package_manifest": "node_modules/@types/react/package.json"
+      },
+      {
+        "from": "react-dom",
+        "peer": "react",
+        "package_manifest": "node_modules/react/package.json"
+      },
+      {
+        "from": "use-sync-external-store",
+        "peer": "react",
+        "package_manifest": "node_modules/react/package.json"
+      }
+    ],
+    "distinct_manifest_counts": {
+      "react": 1,
+      "react-dom": 1,
+      "@types/react": 1
+    }
+  },
+  "typecheck": {
+    "passed": true,
+    "strict": true,
+    "skip_lib_check": false,
+    "command": "bun --no-env-file check --no-script -p tsconfig.json",
+    "scope": "Native, portalled, and inline Select fixtures, with the project client compiler options and pinned React 18 declarations."
+  },
+  "production_client_flags": [
+    "--packages=bundle",
+    "--reject-unresolved",
+    "--sourcemap=none",
+    "--target=browser",
+    "--format=cjs"
+  ],
+  "production_client_externals": ["react", "react/jsx-runtime"],
+  "production_builder_sha256": "b54e55db5974b5e0e44b7c7c77eed2600abeb1b944dd02df4e1ba1f7d3ed45e4",
+  "native_plugin_baseline": {
+    "file": "artifacts/ui-evaluation/baseline/client.js",
+    "sha256": "2ef50bbaa2acf9f56f33d9083582bc1022f108d8d8bbd5d01e52a5b445bc7796",
+    "raw_bytes": 44443,
+    "gzip_bytes": 12460,
+    "emitted_literal_require_specifiers": ["react"]
+  },
+  "size_scope": "Gzip level 9. When present, the baseline measures the full native plugin client. Each probe measures a standalone fixture and does not estimate a plugin size delta. The React DOM external diagnostic does not satisfy the current plugin bundle contract. Host rendering was not tested.",
+  "builds": [
+    {
+      "fixture": "native",
+      "production_builder": {
+        "accepted": true
+      },
+      "production_flags_measurement": {
+        "raw_bytes": 2784,
+        "gzip_bytes": 1015,
+        "input_module_count": 2,
+        "bundled_react_inputs": [],
+        "metadata_external_bare_specifiers": ["react"],
+        "metadata_external_relative_specifier_count": 0,
+        "emitted_literal_require_specifiers": ["react"],
+        "emitted_requires_disallowed_by_plugin": [],
+        "react_dom_importers": []
+      }
+    },
+    {
+      "fixture": "portal",
+      "production_builder": {
+        "accepted": false,
+        "rejection": "Client must use the host React instance: node_modules/react-dom/index.js"
+      },
+      "production_flags_measurement": {
+        "raw_bytes": 1191969,
+        "gzip_bytes": 203489,
+        "input_module_count": 159,
+        "bundled_react_inputs": [
+          "node_modules/react-dom/cjs/react-dom.development.js",
+          "node_modules/react-dom/index.js"
+        ],
+        "metadata_external_bare_specifiers": ["react", "react/jsx-runtime"],
+        "metadata_external_relative_specifier_count": 22,
+        "emitted_literal_require_specifiers": ["react", "react/jsx-runtime"],
+        "emitted_requires_disallowed_by_plugin": [],
+        "react_dom_importers": [
+          "node_modules/@base-ui/react/floating-ui-react/components/FloatingPortal.mjs",
+          "node_modules/@base-ui/react/internals/useAnimationsFinished.mjs",
+          "node_modules/@base-ui/react/utils/popups/popupStoreUtils.mjs",
+          "node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs"
+        ]
+      },
+      "react_dom_external_diagnostic": {
+        "meets_current_plugin_contract": false,
+        "raw_bytes": 331427,
+        "gzip_bytes": 69443,
+        "input_module_count": 155,
+        "bundled_react_inputs": [],
+        "metadata_external_bare_specifiers": ["react", "react-dom", "react/jsx-runtime"],
+        "metadata_external_relative_specifier_count": 22,
+        "emitted_literal_require_specifiers": ["react", "react-dom", "react/jsx-runtime"],
+        "emitted_requires_disallowed_by_plugin": ["react-dom"],
+        "react_dom_importers": [
+          "node_modules/@base-ui/react/floating-ui-react/components/FloatingPortal.mjs",
+          "node_modules/@base-ui/react/internals/useAnimationsFinished.mjs",
+          "node_modules/@base-ui/react/utils/popups/popupStoreUtils.mjs",
+          "node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs"
+        ]
+      }
+    },
+    {
+      "fixture": "inline",
+      "production_builder": {
+        "accepted": false,
+        "rejection": "Client must use the host React instance: node_modules/react-dom/index.js"
+      },
+      "production_flags_measurement": {
+        "raw_bytes": 1191302,
+        "gzip_bytes": 203371,
+        "input_module_count": 158,
+        "bundled_react_inputs": [
+          "node_modules/react-dom/cjs/react-dom.development.js",
+          "node_modules/react-dom/index.js"
+        ],
+        "metadata_external_bare_specifiers": ["react", "react/jsx-runtime"],
+        "metadata_external_relative_specifier_count": 22,
+        "emitted_literal_require_specifiers": ["react", "react/jsx-runtime"],
+        "emitted_requires_disallowed_by_plugin": [],
+        "react_dom_importers": [
+          "node_modules/@base-ui/react/floating-ui-react/components/FloatingPortal.mjs",
+          "node_modules/@base-ui/react/internals/useAnimationsFinished.mjs",
+          "node_modules/@base-ui/react/utils/popups/popupStoreUtils.mjs",
+          "node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs"
+        ]
+      },
+      "react_dom_external_diagnostic": {
+        "meets_current_plugin_contract": false,
+        "raw_bytes": 330760,
+        "gzip_bytes": 69329,
+        "input_module_count": 154,
+        "bundled_react_inputs": [],
+        "metadata_external_bare_specifiers": ["react", "react-dom", "react/jsx-runtime"],
+        "metadata_external_relative_specifier_count": 22,
+        "emitted_literal_require_specifiers": ["react", "react-dom", "react/jsx-runtime"],
+        "emitted_requires_disallowed_by_plugin": ["react-dom"],
+        "react_dom_importers": [
+          "node_modules/@base-ui/react/floating-ui-react/components/FloatingPortal.mjs",
+          "node_modules/@base-ui/react/internals/useAnimationsFinished.mjs",
+          "node_modules/@base-ui/react/utils/popups/popupStoreUtils.mjs",
+          "node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs"
+        ]
+      }
+    }
+  ]
+}

@@ -8,3 +8,211 @@
   font-size: 13px;
   line-height: 1.5;
 }
+
+.decision-review-rules {
+  --decision-review-rule-border: var(--dsw-alias-settings-card-stroke, var(--dsw-alias-border-l4, #8885));
+  --decision-review-rule-input-fill: var(--dsw-alias-bg-layer-3, Canvas);
+  --decision-review-rule-card-fill: var(
+    --dsw-alias-settings-card-fill,
+    color-mix(in srgb, var(--decision-review-rule-input-fill), var(--decision-review-rule-border) 15%)
+  );
+  --decision-review-rule-muted: var(--dsw-alias-label-secondary, GrayText);
+  --decision-review-rule-error: var(--dsw-alias-state-error-primary, #b52d28);
+  --decision-review-rule-focus: var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary, #365cda));
+  --decision-review-rule-radius: var(--dsw-radius-sm, 8px);
+
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  border-top: 1px solid var(--decision-review-rule-border);
+  padding-top: 16px;
+}
+
+.decision-review-rules-intro,
+.decision-review-rules-body,
+.decision-review-rules-list {
+  display: grid;
+  min-width: 0;
+}
+
+.decision-review-rules-intro {
+  gap: 4px;
+}
+
+.decision-review-rules-intro p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.decision-review-rules-heading,
+.decision-review-rule-header,
+.decision-review-rule-details {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.decision-review-rules-heading h2,
+.decision-review-rules-intro h3,
+.decision-review-rule-header h3 {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.decision-review-rules-heading h2 {
+  font-size: 15px;
+}
+
+.decision-review-rules-intro h3,
+.decision-review-rule-header h3 {
+  font-size: 14px;
+}
+
+.decision-review-rules-note {
+  margin: 0;
+  color: var(--decision-review-rule-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.decision-review-rules-note[data-error] {
+  color: var(--decision-review-rule-error);
+}
+
+.decision-review-rules-summary,
+.decision-review-rule-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.decision-review-rules-body,
+.decision-review-rules-list {
+  gap: 10px;
+}
+
+.decision-review-rules-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.decision-review-rules-body[data-empty],
+.decision-review-rule {
+  padding: 14px;
+  border: 1px solid var(--decision-review-rule-border);
+  border-radius: var(--dsw-radius-md, 10px);
+  background: var(--decision-review-rule-card-fill);
+}
+
+.decision-review-rules-body[data-empty] {
+  border-style: dashed;
+}
+
+.decision-review-rule {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.decision-review-rule:focus-within {
+  border-color: var(--decision-review-rule-focus);
+  background: color-mix(in srgb, var(--decision-review-rule-focus) 6%, var(--decision-review-rule-card-fill));
+}
+
+.decision-review-rule-header {
+  align-items: center;
+}
+
+.decision-review-rule-field,
+.decision-review-rule-label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.decision-review-rule-label > span {
+  font-weight: 500;
+}
+
+.decision-review-rule-input,
+.decision-review-rules-button {
+  box-sizing: border-box;
+  max-width: 100%;
+  border: 1px solid var(--decision-review-rule-border);
+  border-radius: var(--decision-review-rule-radius);
+  background: var(--decision-review-rule-input-fill);
+  color: inherit;
+  font: inherit;
+}
+
+.decision-review-rule-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 10px;
+}
+
+.decision-review-rule-input[aria-invalid='true'] {
+  border-color: var(--decision-review-rule-error);
+}
+
+.decision-review-rule-verdict {
+  width: min(100%, 18rem);
+  min-height: 34px;
+}
+
+.decision-review-rule-condition {
+  resize: vertical;
+}
+
+.decision-review-rule-condition::placeholder {
+  color: var(--decision-review-rule-muted);
+  opacity: 1;
+}
+
+.decision-review-rule-count {
+  margin-inline-start: auto;
+}
+
+.decision-review-rules-button {
+  justify-self: start;
+  min-height: 34px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.decision-review-rules-button:enabled:hover {
+  background: var(
+    --dsw-alias-interactive-bg-hover,
+    color-mix(in srgb, currentColor 6%, var(--decision-review-rule-input-fill))
+  );
+}
+
+.decision-review-rules-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.decision-review-rules-add {
+  font-weight: 600;
+}
+
+.decision-review-rule-remove {
+  min-height: 28px;
+  padding: 3px 8px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--decision-review-rule-muted);
+}
+
+.decision-review-rule-remove:enabled:hover {
+  color: var(--decision-review-rule-error);
+}
+
+.decision-review-rule-input:focus-visible,
+.decision-review-rules-button:focus-visible {
+  outline: 2px solid var(--decision-review-rule-focus);
+  outline-offset: 2px;
+}

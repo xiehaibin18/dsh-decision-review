@@ -172,7 +172,7 @@ def verify_inventory(launch, cookie):
     print("Host inventory resolved the active row, English and Chinese metadata, and SVG icon")
 
 
-def verify_host(dsh, bundle, root):
+def verify_host(dsh, bundle, root, browser=False):
     environment = isolated_environment(root)
     if bundle.is_dir():
         shutil.copytree(bundle, root / "dist")
@@ -199,6 +199,13 @@ def verify_host(dsh, bundle, root):
             verify_client(launch, cookie)
             verify_routes(launch, cookie)
             verify_inventory(launch, cookie)
+            if browser:
+                source_root = Path(__file__).resolve().parents[1]
+                subprocess.run(
+                    ["bun", "--no-env-file", "scripts/verify-rules-host.mjs"],
+                    input=json.dumps({"url": f"{launch.scheme}://{launch.netloc}", "cookie": cookie}), text=True, cwd=source_root,
+                    env=environment, check=True, timeout=120,
+                )
         finally:
             if process.poll() is None:
                 process.terminate()
@@ -213,6 +220,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("bundle", type=Path, help="built dist directory or decision-review tarball")
     parser.add_argument("--dsh", default="dsh", help="installed DSH executable (default: dsh on PATH)")
+    parser.add_argument("--browser", action="store_true", help="also verify rules in an isolated Chrome browser")
     args = parser.parse_args()
     dsh = shutil.which(args.dsh)
     if dsh is None:
@@ -222,8 +230,8 @@ def main():
         parser.error(f"Tarball or package directory not found: {bundle}")
     try:
         with tempfile.TemporaryDirectory(prefix="dsh-decision-review-") as directory:
-            verify_host(str(Path(dsh).absolute()), bundle, Path(directory))
-    except (VerificationError, OSError, subprocess.TimeoutExpired, ValueError, KeyError) as error:
+            verify_host(str(Path(dsh).absolute()), bundle, Path(directory), args.browser)
+    except (VerificationError, OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError, ValueError, KeyError) as error:
         parser.exit(1, f"Host verification failed: {error}\n")
 
 

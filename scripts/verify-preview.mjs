@@ -171,11 +171,67 @@ last line | 保留空格
   await click('重新加载已保存配置')
   await until('!!document.querySelector("textarea")')
   assert.equal(await value('匹配条件'), multiline)
+  await view.scrollTo('textarea')
+  await view.click('textarea')
+  await view.press('Tab', { modifiers: ['Shift'] })
+  assert.equal(await view.evaluate('document.activeElement.tagName'), 'SELECT')
+  await view.press('拒')
+  assert.equal(await value('评审结论'), 'deny')
+  await view.press('Tab')
+  assert.equal(await view.evaluate('document.activeElement.tagName'), 'TEXTAREA')
+  assert.equal(await view.evaluate('getComputedStyle(document.activeElement).outlineWidth'), '2px')
+  const semantics = await view.evaluate(`(() => {
+    const control = document.querySelector('textarea');
+    return {label: control.labels[0].textContent, required: control.getAttribute('aria-required'), descriptions: control.getAttribute('aria-describedby').split(' ').map(id=>document.getElementById(id)?.textContent)};
+  })()`)
+  assert.match(semantics.label, /匹配条件/)
+  assert.equal(semantics.required, 'true')
+  assert.ok(semantics.descriptions.every(Boolean))
+  await click('保存')
+  await until(textIncludes('设置已保存。'))
+  await capture('zh-rules-keyboard')
+  await choose('界面语言', 'en')
+  await choose('主题', 'dark')
+  await view.resize(390, 844)
+  await choose('预览宽度', 'narrow')
+  assert.equal(await value('Condition'), multiline)
+  await capture('en-dark-narrow-rules')
+  const longCondition = 'Long rule condition 中文 | '.repeat(17)
+  await fill('Condition', longCondition)
+  assert.equal(await view.evaluate('document.querySelector("textarea").getAttribute("aria-invalid")'), 'true')
+  await capture('en-dark-narrow-long-rule')
+  await fill('Condition', multiline)
+  await choose('界面语言', 'zh')
+  await choose('主题', 'light')
+  await view.resize(1280, 1000)
+  await choose('预览宽度', 'wide')
   await click('添加规则')
+  assert.equal(
+    await view.evaluate('document.activeElement === [...document.querySelectorAll("textarea")].at(-1)'),
+    true,
+  )
   await click('保存')
   await until(textIncludes('请修正有提示的规则后再保存。'))
+  const invalid = await view.evaluate(`(() => {
+    const control = [...document.querySelectorAll('textarea')].at(-1);
+    return {invalid:control.getAttribute('aria-invalid'),descriptions:control.getAttribute('aria-describedby').split(' ').map(id=>document.getElementById(id)?.textContent)};
+  })()`)
+  assert.equal(invalid.invalid, 'true')
+  assert.match(invalid.descriptions.join(' '), /条件/)
+  assert.ok(invalid.descriptions.every(Boolean))
   await capture('zh-multiline-validation')
   passed('Multiline text survives save/reload byte-for-byte; blank rule blocks save', { multiline })
+  await view.click('.decision-review-rule-remove')
+  assert.equal(await view.evaluate('document.activeElement === document.querySelector("textarea")'), true)
+  await view.click('.decision-review-rule-remove')
+  assert.equal(
+    await view.evaluate('document.activeElement === document.querySelector(".decision-review-rules-add")'),
+    true,
+  )
+  passed('Keyboard select, focus ring, linked errors, add/remove focus and bilingual narrow rules', {
+    semantics,
+    invalid,
+  })
   await scene('invalid')
   assert.equal(await value('评审引擎'), 'session')
   assert.equal(await value('Decisions API 地址'), '')
@@ -198,19 +254,37 @@ last line | 保留空格
   passed('Switch during delayed load cancels old scene without stale form')
   await scene('slow')
   await fill('Decisions 模型', 'submitted-before-edit')
+  await click('添加规则')
+  await fill('匹配条件', multiline)
+  const previousSave = requests.findLast(({ url }) => url.endsWith('/decision-review/save'))
   await click('保存')
   await until(textIncludes('正在保存…'))
+  const pendingSave = requests.findLast(({ url }) => url.endsWith('/decision-review/save'))
+  assert.ok(pendingSave && pendingSave !== previousSave, 'Expected a new save request before editing')
   assert.equal(await disabled('运行冒烟测试（3 个场景）'), true)
-  await capture('zh-saving')
   await fill('Decisions 模型', 'edited-during-save')
+  await fill('匹配条件', multiline + 'New edit after submission')
+  const savingAfterEdits = await view.evaluate(
+    `[...document.querySelectorAll('button')].some(button=>button.textContent==='正在保存…' && button.disabled)`,
+  )
+  const responsePendingAfterEdits = pendingSave.status === undefined
+  assert.equal(savingAfterEdits, true, 'Model and rule edits must finish while the form is still saving')
+  assert.equal(responsePendingAfterEdits, true, 'Model and rule edits must finish before the save response')
+  await capture('zh-saving')
   await until(`![...document.querySelectorAll('button')].some(button=>button.textContent==='正在保存…')`)
   assert.equal(await value('Decisions 模型'), 'edited-during-save')
   assert.match(await body(), /请先保存修改/)
+  assert.equal(await value('匹配条件'), multiline + 'New edit after submission')
   await click('重新加载已保存配置')
   await until(
     `document.querySelector('.decision-review-panel') && [...document.querySelectorAll('input')].some(input=>input.value==='submitted-before-edit')`,
   )
-  passed('Saving state is visible; edits made during save are not overwritten')
+  assert.equal(await value('匹配条件'), multiline)
+  passed('Saving state is visible; model and multiline rule edits made during save are not overwritten', {
+    savingAfterEdits,
+    responsePendingAfterEdits,
+    responseStatus: pendingSave.status,
+  })
   await click('运行冒烟测试（3 个场景）')
   await until(textIncludes('正在测试…'))
   await scene('session')

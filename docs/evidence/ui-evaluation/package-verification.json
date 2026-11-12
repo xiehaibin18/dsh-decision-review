@@ -1,0 +1,51 @@
+{
+  "status": "passed",
+  "platform": "darwin-arm64",
+  "bun": {
+    "version": "1.4.4",
+    "revision": "963452075e9d7e2a47a482f297143af5ed4f76c0"
+  },
+  "node": "v24.22.2",
+  "directory": {
+    "files": [
+      "LICENSE.upstream",
+      "README.md",
+      "client.js",
+      "cordis.patch.yml",
+      "icon.svg",
+      "index.js",
+      "locale/en.json",
+      "locale/zh.json",
+      "package.json"
+    ]
+  },
+  "tarball": {
+    "name": "local-decision-review-0.1.0.tgz",
+    "sha256": "1e32c400616da62e68d08e0489fbb4b3353dc81f6c17e96d8a659ce8990b114c",
+    "files": [
+      "package/LICENSE.upstream",
+      "package/README.md",
+      "package/client.js",
+      "package/cordis.patch.yml",
+      "package/icon.svg",
+      "package/index.js",
+      "package/locale/en.json",
+      "package/locale/zh.json",
+      "package/package.json"
+    ]
+  },
+  "installedTestFiles": [
+    "answers.test.js",
+    "client-dom.test.js",
+    "client.test.js",
+    "compose.test.js",
+    "host-integration.test.js",
+    "preload.test.js",
+    "review-flow.test.js",
+    "routes.test.js",
+    "session-engine.test.js",
+    "settings.test.js",
+    "stored-settings.test.js"
+  ],
+  "phase": "verification evidence"
+}

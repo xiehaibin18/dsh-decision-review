@@ -1,0 +1,189 @@
+{
+  "status": "repair_validation_passed_pending_independent_review",
+  "baseline_head": "7423a1af48c9b1723f41739b0e297e48fd8750b6",
+  "bun_revision": "963452075e9d7e2a47a482f297143af5ed4f76c0",
+  "verified_source_sha256": {
+    "scripts/verify-rules-host.mjs": "4fa561bbb863d782fe67ba92568f5ced9595e3ed32deecd887c7c91ff29c39f0",
+    "scripts/verify-preview.mjs": "6e75c9ab4f13e1157de6c2ed26193a2c65309afa09eade5c5dd48fbbe0421d35",
+    "preview/verifier.test.js": "41267a82e11e8a05b7cd8aa1b31c3a9104ad794c56564641ba5008f1f9afe825"
+  },
+  "client_sha256": "3751bcfad0ca69db590d319ca7b2faefdf0be6014db2eba150c99fe86b56d916",
+  "client_identical_to_reviewed_head": true,
+  "stale_evidence": {
+    "replay": "The same verifier tests run with baseline and repaired verifier bytes. Preexisting passed JSON; constructor or navigate fails; screenshot and close also fail after navigate failure.",
+    "baseline": {
+      "exit_code": 1,
+      "failing_regression_tests": 2,
+      "recorded_status": "passed"
+    },
+    "repaired": {
+      "test_exit_code": 0,
+      "regression_tests": 2,
+      "verifier_exit_code": 1,
+      "recorded_status": "failed",
+      "message": "Error: PRIMARY_STARTUP_FAILURE",
+      "failure_json_exists_before_screenshot": true,
+      "close_attempted_after_navigate_failure": true
+    },
+    "test_file": "preview/verifier.test.js"
+  },
+  "warning": {
+    "injection": "Bun.WebView.navigate wrapper evaluates console.warn(\"REVIEW_REAL_WARNING_PROBE\") on about:blank. The remaining verifier and temporary DSH host run normally.",
+    "baseline": {
+      "exit_code": 0,
+      "status": "passed",
+      "checks": 6,
+      "warnings": [
+        {
+          "type": "warning",
+          "args": [
+            "REVIEW_REAL_WARNING_PROBE"
+          ]
+        }
+      ],
+      "message": null
+    },
+    "repaired": {
+      "exit_code": 1,
+      "status": "failed",
+      "checks": 6,
+      "warnings": [
+        {
+          "type": "warning",
+          "args": [
+            "REVIEW_REAL_WARNING_PROBE"
+          ]
+        }
+      ],
+      "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   {\n+     args: [\n+       'REVIEW_REAL_WARNING_PROBE'\n+     ],\n+     type: 'warning'\n+   }\n+ ]\n- []\n"
+    },
+    "original_normal_host_record_had_warnings": false
+  },
+  "delayed_edit": {
+    "injection": "Insert await Bun.sleep(2600) immediately before fill(\"Decisions 模型\", \"edited-during-save\") and observe saving=false before edits. No business or fixture changes.",
+    "baseline": {
+      "exit_code": 0,
+      "status": "passed",
+      "checks": 15,
+      "saving_before_delayed_edit": false,
+      "failures": []
+    },
+    "repaired": {
+      "exit_code": 1,
+      "status": "failed",
+      "checks": 10,
+      "saving_before_delayed_edit": false,
+      "failures": [
+        "AssertionError [ERR_ASSERTION]: Model and rule edits must finish while the form is still saving\n\nfalse !== true\n\n    at /Volumes/DevData/.codex/worktrees/5230/dsh-decision-review/artifacts/ui-evaluation/review-fixes/fixed-delayed-preview.mjs:273:10"
+      ]
+    }
+  },
+  "normal_regression": {
+    "check": {
+      "status": "passed",
+      "tests": 267,
+      "strict_types_lint_format": true
+    },
+    "preview": {
+      "status": "passed",
+      "groups": 15,
+      "inflight_check": {
+        "name": "Saving state is visible; model and multiline rule edits made during save are not overwritten",
+        "details": {
+          "savingAfterEdits": true,
+          "responsePendingAfterEdits": true,
+          "responseStatus": 200
+        }
+      },
+      "uncaught": [],
+      "all_requests_localhost": true
+    },
+    "host": {
+      "status": "passed",
+      "groups": 6,
+      "checks": [
+        {
+          "name": "Installed host rendered real shared rule editor with one scoped stylesheet",
+          "release": {
+            "version": "0.2.2-rc.2",
+            "commit": "a6b1b85"
+          }
+        },
+        {
+          "name": "zh-light-rules",
+          "metrics": {
+            "width": 1280,
+            "scrollWidth": 1280,
+            "editor": {
+              "x": 328,
+              "width": 680,
+              "right": 1008
+            },
+            "dark": false,
+            "inputFill": "rgb(255, 255, 255)",
+            "inputColor": "rgb(15, 17, 21)"
+          }
+        },
+        {
+          "name": "Keyboard verdict and exact multiline text persisted across closing/reopening host config",
+          "multiline": "  第一行\n\n  npm test -- --runInBand\nlast line | 保留空格  \n"
+        },
+        {
+          "name": "zh-dark-rules",
+          "metrics": {
+            "width": 1280,
+            "scrollWidth": 1280,
+            "editor": {
+              "x": 328,
+              "width": 680,
+              "right": 1008
+            },
+            "dark": true,
+            "inputFill": "rgb(53, 54, 56)",
+            "inputColor": "rgb(249, 250, 251)"
+          }
+        },
+        {
+          "name": "zh-dark-narrow-rules",
+          "metrics": {
+            "width": 390,
+            "scrollWidth": 390,
+            "editor": {
+              "x": 20,
+              "width": 345,
+              "right": 365
+            },
+            "dark": true,
+            "inputFill": "rgb(53, 54, 56)",
+            "inputColor": "rgb(249, 250, 251)"
+          }
+        },
+        {
+          "name": "Validation, adjacent/empty focus restoration, live host theme and 390px viewport with collapsed sidebar passed"
+        }
+      ],
+      "console": [],
+      "uncaught": [],
+      "requests": 57,
+      "no_model_requests": true
+    }
+  },
+  "local_raw_evidence_root": "artifacts/ui-evaluation/review-fixes",
+  "reused_evidence": {
+    "head": "7423a1af48c9b1723f41739b0e297e48fd8750b6",
+    "paths": [
+      "docs/evidence/ui-evaluation/dependency-probe.json",
+      "docs/evidence/ui-evaluation/native-size.json",
+      "docs/evidence/ui-evaluation/package-verification.json",
+      "docs/evidence/ui-evaluation/*.png"
+    ],
+    "scope": "Unchanged product bytes, original appearance, dependency comparison and earlier package verification. No repeated dependency probe or local full-package verification in this repair."
+  },
+  "unverified": [
+    "Native popup arrow keys",
+    "IME composition",
+    "Screen-reader manual acceptance",
+    "Real user profile",
+    "Base UI/shadcn/Tailwind host integration"
+  ]
+}
