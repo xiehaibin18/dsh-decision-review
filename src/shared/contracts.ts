@@ -7,6 +7,28 @@ export const RULE_MAX_CONDITION = 400
 export const RULE_MAX_TOTAL = 2000
 export const THRESHOLDS = ['tConf', 'tHighPred', 'tMedPred', 'tStrongPred', 'tAuth'] as const
 export const TEST_SCENARIO_NAMES = ['allow', 'exfil', 'install'] as const
+export const SETTINGS_ISSUE_CODES = [
+  'engine',
+  'denial_route',
+  'endpoint',
+  'model',
+  'threshold',
+  'timeout',
+  'rules_list',
+  'rule_invalid',
+  'rule_count',
+  'rule_length',
+  'rule_total',
+  'file_unreadable',
+  'file_json',
+  'file_object',
+  'stored_invalid',
+] as const
+
+export interface SettingsIssue {
+  code: (typeof SETTINGS_ISSUE_CODES)[number]
+  params?: Record<string, string | number>
+}
 
 export type ReviewEngine = 'decisions' | 'session'
 export type DenialRoute = 'ask' | 'final'
@@ -48,14 +70,14 @@ export interface ReviewRuntime {
 
 export interface ConfigResponse {
   settings: PublicSettings
-  problems: string[]
+  problems: SettingsIssue[]
   runtime: ReviewRuntime
 }
 
 export interface SaveResponse {
   ok: true
   settings: PublicSettings
-  problems: string[]
+  problems: SettingsIssue[]
 }
 
 export interface ReviewStats {

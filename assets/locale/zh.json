@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "决策评审",
-    "description": "使用独立的 OpenAI Decisions API 或当前会话的模型评审工具调用。"
+    "description": "在 Auto 模式下，通过独立的 Decisions API 或当前会话的模型评审工具调用。"
   }
 }

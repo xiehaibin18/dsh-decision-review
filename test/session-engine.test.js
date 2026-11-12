@@ -121,8 +121,8 @@ describe('session engine through the approval entry point', () => {
     const result = await review([{ type: 'text-delta', index: 0, text: '{"risk":"medium","decision":"deny"}' }, STOP])
     expect(result.kind).toBe('ask')
     expect(result.reason).toMatch(/session reviewer denied this call as medium risk/)
-    expect(result.displayReason.zh).toMatch(/会话评审员判定为中风险并拒绝/)
-    expect(result.displayReason.en).toMatch(/session reviewer denied this call as medium risk/)
+    expect(result.displayReason.zh).toMatch(/会话模型将此调用判为中风险并拒绝/)
+    expect(result.displayReason.en).toMatch(/session model denied this call as medium risk/)
   })
 
   test('keeps the reviewer reason in the card when one is given', async () => {

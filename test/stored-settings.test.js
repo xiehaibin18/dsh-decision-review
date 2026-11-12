@@ -29,7 +29,7 @@ describe('lenient normalization reports what it replaced', () => {
     const settings = normalizeSettings({ tConf: 1.1, tAuth: 'high' }, { problems })
     expect(settings).toMatchObject({ tConf: 0.75, tAuth: 0.7 })
     expect(problems).toHaveLength(2)
-    expect(problems[0]).toMatch(/tConf/)
+    expect(problems[0].issue).toEqual({ code: 'threshold', params: { field: 'tConf' } })
   })
 
   test('lists a dropped rule, a bad timeout and a non-list rules value', () => {
@@ -88,7 +88,7 @@ describe('invalid stored settings', () => {
     const payload = await configuration()
     expect(payload).toMatchObject({
       runtime: { paused: true },
-      problems: [expect.stringContaining('tConf')],
+      problems: [{ code: 'threshold', params: { field: 'tConf' } }],
       settings: { tConf: 0.75, hasApiKey: true },
     })
     expect(JSON.stringify(payload)).not.toContain(SECRET)
@@ -127,7 +127,7 @@ describe('invalid stored settings', () => {
     const config = await configuration()
     expect(config.runtime.paused).toBe(true)
     expect(config.settings).toMatchObject({ endpoint: '', model: '' })
-    expect(config.problems.join(' ')).toMatch(/stored endpoint.*stored model/)
+    expect(config.problems).toEqual([{ code: 'endpoint' }, { code: 'model' }])
     await expect(review()).resolves.toHaveProperty('kind', 'deny')
     const smoke = await route('test').fetch(jsonRequest(`${BASE}/test`, { scenarios: ['allow'] }))
     expect(smoke.status).toBe(409)
@@ -175,7 +175,7 @@ describe('invalid stored settings', () => {
     start({ apiKey: SECRET, [field]: bad })
     const payload = await configuration()
     expect(payload.runtime.paused).toBe(true)
-    expect(payload.problems.join(' ')).toContain(field)
+    expect(payload.problems).toEqual([{ code: 'threshold', params: { field } }])
     const fetchDecisions = stubDecisionsFetch(() =>
       makeAnswers({ risk: 'medium', overrides: { explicit_authorization: { type: 'predicate', probability: 0 } } }),
     )
@@ -197,7 +197,7 @@ describe('invalid stored settings', () => {
       const fetchDecisions = stubDecisionsFetch(() => makeAnswers({ risk: 'high' }))
       const payload = await configuration()
       expect(payload.runtime.paused).toBe(true)
-      expect(payload.problems.join(' ')).toContain(field)
+      expect(payload.problems).toEqual([{ code: field === 'denialRoute' ? 'denial_route' : 'engine' }])
       await expect(review()).resolves.toHaveProperty('kind', 'deny')
       expect(fetchDecisions).not.toHaveBeenCalled()
     },
@@ -223,7 +223,7 @@ describe('invalid stored settings', () => {
     const payload = await configuration()
     const result = await review()
     const trail = fs.readFileSync(path.join(profileDir, 'decision-review.log.jsonl'), 'utf8')
-    expect(payload.problems[0]).toContain('not valid JSON')
+    expect(payload.problems).toEqual([{ code: 'file_json' }])
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('not valid JSON'))
     expect(JSON.stringify(payload)).not.toContain(canary)
     expect(JSON.stringify(warn.mock.calls)).not.toContain(canary)
@@ -242,7 +242,8 @@ describe('invalid stored settings', () => {
     apply(host.ctx)
     const payload = await configuration()
     expect(payload.runtime.paused).toBe(true)
-    expect(payload.problems[0]).toMatch(/could not be read \(EISDIR\); defaults/)
+    expect(payload.problems).toEqual([{ code: 'file_unreadable' }])
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/could not be read \(EISDIR\); defaults/))
   })
 
   test.each([
