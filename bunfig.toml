@@ -1,5 +1,16 @@
+env = false
+
 [install]
 linker = "hoisted"
+
+[test]
+root = "./test"
+preload = ["./test/preload.js"]
+timeout = 5000
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = ["test/**", "**/node_modules/**"]
+coverageReporter = ["text", "lcov"]
+coverageDir = "./coverage"
 
 [fmt]
 printWidth = 120
