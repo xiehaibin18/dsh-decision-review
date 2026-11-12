@@ -256,12 +256,21 @@ last line | 保留空格
   await fill('Decisions 模型', 'submitted-before-edit')
   await click('添加规则')
   await fill('匹配条件', multiline)
+  const previousSave = requests.findLast(({ url }) => url.endsWith('/decision-review/save'))
   await click('保存')
   await until(textIncludes('正在保存…'))
+  const pendingSave = requests.findLast(({ url }) => url.endsWith('/decision-review/save'))
+  assert.ok(pendingSave && pendingSave !== previousSave, 'Expected a new save request before editing')
   assert.equal(await disabled('运行冒烟测试（3 个场景）'), true)
-  await capture('zh-saving')
   await fill('Decisions 模型', 'edited-during-save')
   await fill('匹配条件', multiline + 'New edit after submission')
+  const savingAfterEdits = await view.evaluate(
+    `[...document.querySelectorAll('button')].some(button=>button.textContent==='正在保存…' && button.disabled)`,
+  )
+  const responsePendingAfterEdits = pendingSave.status === undefined
+  assert.equal(savingAfterEdits, true, 'Model and rule edits must finish while the form is still saving')
+  assert.equal(responsePendingAfterEdits, true, 'Model and rule edits must finish before the save response')
+  await capture('zh-saving')
   await until(`![...document.querySelectorAll('button')].some(button=>button.textContent==='正在保存…')`)
   assert.equal(await value('Decisions 模型'), 'edited-during-save')
   assert.match(await body(), /请先保存修改/)
@@ -271,7 +280,11 @@ last line | 保留空格
     `document.querySelector('.decision-review-panel') && [...document.querySelectorAll('input')].some(input=>input.value==='submitted-before-edit')`,
   )
   assert.equal(await value('匹配条件'), multiline)
-  passed('Saving state is visible; model and multiline rule edits made during save are not overwritten')
+  passed('Saving state is visible; model and multiline rule edits made during save are not overwritten', {
+    savingAfterEdits,
+    responsePendingAfterEdits,
+    responseStatus: pendingSave.status,
+  })
   await click('运行冒烟测试（3 个场景）')
   await until(textIncludes('正在测试…'))
   await scene('session')

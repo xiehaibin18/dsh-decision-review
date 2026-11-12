@@ -28,3 +28,5 @@ bun run verify:host --dsh /usr/local/bin/dsh --browser dist
 ```
 
 The disposable Chrome process uses a mock keychain/basic password store so the temporary HOME does not access the real macOS keychain. The browser check assumes a fresh Simplified Chinese profile, as created by this verifier on the evaluated installation. Browser keyboard evidence covers Tab/Shift+Tab and character selection, not IME composition or the operating system's native popup arrow-key navigation. See [UI evaluation](ui-style-evaluation.md) for the exact observations and limitations.
+
+Console `error`, `warn`, and `warning` events fail browser acceptance. On browser failure, the verifier replaces any old passing JSON before attempting a diagnostic screenshot. Screenshot or cleanup failures cannot replace the primary error; the process exits nonzero. Regression tests cover startup plus screenshot/cleanup failure with an existing passing record. The UI evaluation includes real-console warning and delayed-edit counterexamples against the original and repaired scripts.

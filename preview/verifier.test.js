@@ -9,6 +9,59 @@ const ORIGINAL = 'original\n'
 const CHANGED = 'probe\n'
 const EDITOR_SAVE = 'probe\neditor save\n'
 
+test.each(['navigate', 'constructor'])(
+  'host %s failure replaces stale success and retains the primary error',
+  (stage) => {
+    const directory = mkdtempSync(join(tmpdir(), 'decision-review-host-failure-'))
+    const verifier = new URL('../scripts/verify-rules-host.mjs', import.meta.url).pathname
+    const evidence = 'artifacts/ui-evaluation/host/acceptance.json'
+    try {
+      writeFileSync(
+        join(directory, 'run.mjs'),
+        `import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+mkdirSync('artifacts/ui-evaluation/host', { recursive: true })
+writeFileSync(${JSON.stringify(evidence)}, JSON.stringify({status:'passed', from:'previous run'}))
+const Bun = { stdin: globalThis.Bun.stdin, write: globalThis.Bun.write, WebView: class {
+  constructor() { if (${JSON.stringify(stage)} === 'constructor') throw new Error('PRIMARY_STARTUP_FAILURE') }
+  async navigate() { throw new Error('PRIMARY_STARTUP_FAILURE') }
+  async screenshot() {
+    writeFileSync('before-screenshot.json', readFileSync(${JSON.stringify(evidence)}))
+    throw new Error('SECONDARY_SCREENSHOT_FAILURE')
+  }
+  async close() {
+    writeFileSync('closed', '')
+    throw new Error('SECONDARY_CLOSE_FAILURE')
+  }
+} }
+` + readFileSync(verifier, 'utf8'),
+      )
+      const result = spawnSync(process.execPath, ['--no-env-file', '--no-install', 'run.mjs'], {
+        cwd: directory,
+        env: { HOME: directory, TMPDIR: directory, NO_COLOR: '1' },
+        input: JSON.stringify({ url: 'http://127.0.0.1:1', cookie: 'synthetic=fixture' }),
+        encoding: 'utf8',
+        timeout: 3000,
+      })
+      expect(result.error).toBeUndefined()
+      expect(result.signal).toBeNull()
+      expect(result.status, result.stderr).toBe(1)
+      const recorded = JSON.parse(readFileSync(join(directory, evidence), 'utf8'))
+      expect(recorded.status, result.stderr).toBe('failed')
+      expect(recorded.message).toBe('Error: PRIMARY_STARTUP_FAILURE')
+      expect(recorded.from).toBeUndefined()
+      expect(result.stderr.trim()).toMatch(/error: PRIMARY_STARTUP_FAILURE[\s\S]*Bun v/)
+      if (stage === 'navigate') {
+        expect(JSON.parse(readFileSync(join(directory, 'before-screenshot.json'), 'utf8'))).toEqual(recorded)
+        expect(readFileSync(join(directory, 'closed'), 'utf8')).toBe('')
+        expect(result.stderr).toContain('Cannot capture host failure screenshot:')
+        expect(result.stderr).toContain('Cannot close host browser after failure:')
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  },
+)
+
 test('HMR source changes restore all original bytes on success', () => {
   const result = runFixture('clean')
   expect(result.status, result.output).toBe(0)

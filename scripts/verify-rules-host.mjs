@@ -13,13 +13,8 @@ const checks = []
 const errors = []
 const events = []
 const requests = []
-const view = new Bun.WebView({
-  width: 1280,
-  height: 1000,
-  // A disposable HOME has no user keychain; keep synthetic cookies in this browser only.
-  backend: { type: 'chrome', url: false, argv: ['--use-mock-keychain', '--password-store=basic'] },
-  console: (type, ...args) => events.push({ type, args }),
-})
+let view
+let failure
 async function until(expression) {
   const deadline = Date.now() + 10000
   while (Date.now() < deadline) {
@@ -73,6 +68,13 @@ async function capture(name) {
 }
 try {
   await mkdir(directory, { recursive: true })
+  view = new Bun.WebView({
+    width: 1280,
+    height: 1000,
+    // A disposable HOME has no user keychain; keep synthetic cookies in this browser only.
+    backend: { type: 'chrome', url: false, argv: ['--use-mock-keychain', '--password-store=basic'] },
+    console: (type, ...args) => events.push({ type, args }),
+  })
   console.log('Host browser starting')
   await view.navigate('about:blank')
   console.log('Host browser ready')
@@ -167,7 +169,7 @@ try {
   })
   assert.deepEqual(errors, [])
   assert.deepEqual(
-    events.filter(({ type }) => ['error', 'warn'].includes(type)),
+    events.filter(({ type }) => ['error', 'warn', 'warning'].includes(type)),
     [],
   )
   assert.ok(requests.every(({ url }) => url.startsWith(target.origin) || url.startsWith('data:')))
@@ -178,12 +180,35 @@ try {
   )
   console.log(`Host rules browser acceptance passed: ${checks.length} groups`)
 } catch (error) {
-  await Bun.write(`${directory}/failure.png`, await view.screenshot({ format: 'png' }))
-  await Bun.write(
-    `${directory}/acceptance.json`,
-    JSON.stringify({ status: 'failed', message: String(error), checks, requests, events, errors }, null, 2),
-  )
-  throw error
+  failure = error
+  await recordFailure(error)
+  if (view) {
+    try {
+      await Bun.write(`${directory}/failure.png`, await view.screenshot({ format: 'png' }))
+    } catch (screenshotError) {
+      console.error('Cannot capture host failure screenshot:', screenshotError)
+    }
+  }
 } finally {
-  await view.close()
+  try {
+    await view?.close()
+  } catch (closeError) {
+    if (failure) console.error('Cannot close host browser after failure:', closeError)
+    else {
+      failure = closeError
+      await recordFailure(closeError)
+    }
+  }
+}
+if (failure) throw failure
+
+async function recordFailure(error) {
+  try {
+    await Bun.write(
+      `${directory}/acceptance.json`,
+      JSON.stringify({ status: 'failed', message: String(error), checks, requests, events, errors }, null, 2),
+    )
+  } catch (writeError) {
+    console.error('Cannot write host failure evidence:', writeError)
+  }
 }
