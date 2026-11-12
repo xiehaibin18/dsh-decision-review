@@ -45,3 +45,7 @@ export const CARD: CSSProperties = {
   borderRadius: RADIUS,
 }
 export const ACTION_BAR: CSSProperties = { ...ROW, borderTop: '1px solid ' + BORDER, paddingTop: 14 }
+
+export function buttonStyle(disabled: boolean, style = BUTTON): CSSProperties {
+  return disabled ? { ...style, opacity: 0.55, cursor: 'default' } : style
+}

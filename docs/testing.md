@@ -37,11 +37,11 @@ bun run verify:package
 
 使用 `--isolate` 为每个文件建立新的全局对象和模块注册表。文件内修改 fetch、console、环境、DOM 或时间的测试保持串行；没有启用全局 `--concurrent`，也不使用 retry 掩盖污染。不要用 `mock.module` 替换真实插件或 React 模块。当前没有需要维护的大型快照，业务结果使用有判别力的字段断言。
 
-`test:ci` 采用两个隔离 worker 并行运行文件；结果与报告经过串行对照验证。日常 `test` 默认串行隔离，便于定位；共享状态用例在文件内串行，客户端用例还显式声明 `test.serial`。该 revision 支持 `--shard` 和耗时分配，但当前仅十一个文件，未增加分片作业和耗时缓存。
+`test:ci` 采用两个隔离 worker 并行运行文件；结果与报告经过串行对照验证。日常 `test` 默认串行隔离，便于定位；共享状态用例在文件内串行，客户端用例还显式声明 `test.serial`。该 revision 支持 `--shard` 和耗时分配，但当前套件规模较小，未增加分片作业和耗时缓存。
 
 `test:ci` 使用随机顺序和固定 seed `963452075`。复现时保留日志里的 seed 和同一 Bun revision。时间测试用 `jest.useFakeTimers` 启用假时钟，最后用 `jest.useRealTimers` 恢复。`jest.setSystemTime` 调整系统时间，`jest.advanceTimersByTime` 同步推进假时钟并触发到期的定时回调和 `AbortSignal.timeout`。评审测试在推进后显式等待结果，客户端统计测试在 React 的 `act` 中推进时间并等待界面更新。
 
-JUnit 位于 `artifacts/test/junit.xml`，文本覆盖率输出到日志，LCOV 位于 `coverage/lcov.info`。覆盖率针对加载的构建代码；classic 客户端通过 VM/jsdom 执行，不能把这份统计当作完整客户端源码覆盖率。因此暂不设置会造成错误信心的全局覆盖率门槛；客户端行为由真实挂载及交互断言保护。
+JUnit 位于 `artifacts/test/junit.xml`，文本覆盖率输出到日志，LCOV 位于 `coverage/lcov.info`。当前 LCOV 包含服务端 bundle、预览服务及其导入的服务端源码；classic 客户端通过 VM/jsdom 执行，不能把这份统计当作完整客户端源码覆盖率。因此暂不设置会造成错误信心的全局覆盖率门槛；客户端行为由真实挂载及交互断言保护。
 
 ## 安装产物和生产 Node
 
@@ -65,3 +65,13 @@ CI 不安装或启动真实 DSH，也不声称完成宿主验收。该入口的�
 仅缓存 Bun 下载依赖，键包含系统、架构、revision 和锁文件 hash；缓存命中后仍执行 frozen install 与工具链检查。工具链和 `node_modules` 不从缓存恢复。Actions 固定提交 SHA，checkout 不保存推送凭据。JUnit、覆盖率和安装包证据通过 `always()` 上传，保留 14 天；失败不自动重试。
 
 参考：[Bun 时间控制](https://bun.com/docs/test/dates-times)、[隔离和并行](https://bun.com/docs/test/parallel)、[配置与报告](https://bun.com/docs/test/configuration)。文档描述不替代锁定 revision 的实测；新增 API 时同时检查该二进制和真实 CI。
+
+## Preview boundaries
+
+`bun run test` and `bun run test:ci` also include `preview/service.test.ts` and `preview/verifier.test.js` in the same isolated Bun invocation. The service checks exercise the real settings normalizer through synthetic HTTP requests: write-only keys, strict validation, per-session isolation, invalid-config repair, multiline round trips, fault recovery, test-list validation, cancellation and the deterministic composer. The existing preload still rejects unexpected provider fetches. `bun run test:preview` runs just these source-only checks.
+
+The installed-byte suite remains `test/` only: its production tests load the packed `dist/`, including the new shared-client lifecycle checks. Preview sources are deliberately absent from that harness and the consumer. The Node probe now also checks the injected stylesheet's registration and disposal. Build metadata rejects preview sources and bundled React/React DOM in production client output.
+
+Real browser checks are separate from unit tests: see [preview acceptance](preview-acceptance.md). Run `bun run verify:preview -- http://127.0.0.1:PORT --hmr` against a running preview to exercise the interface and temporarily edit/restore the shared TSX/CSS and HTML entry. It uses a fresh Bun.WebView Chrome process and writes local evidence under `artifacts/browser/`; it is optional and is not part of headless CI.
+
+`preview/verifier.test.js` executes the HMR source-edit helper used by the real browser verifier in isolated Bun subprocesses. It checks final file bytes and nonzero exits for normal-path editor saves, validation failure with an editor save, HTML conflicts, changes before probe application and unreadable restore targets. A conflict in one file must leave its contents intact while other owned edits are restored, and diagnostics must retain both validation and restore failures. These source-only checks do not need Chrome and are excluded from the installed-byte regression harness. Real-browser conflict probes and cleanup evidence are recorded in [preview acceptance](preview-acceptance.md).

@@ -1,0 +1,127 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+body {
+  margin: 0;
+}
+.preview-shell {
+  --dsw-alias-label-primary: #20242a;
+  --dsw-alias-label-secondary: #626873;
+  --dsw-alias-label-primary-foreground: #fff;
+  --dsw-alias-bg-layer-3: #fff;
+  --dsw-alias-border-l4: #d8dce3;
+  --dsw-alias-state-error-primary: #b52d28;
+  --dsw-alias-state-success-primary: #21783e;
+  --dsw-alias-state-business-primary: #365cda;
+  --dsw-radius-md: 8px;
+  color-scheme: light;
+  color: var(--dsw-alias-label-primary);
+  background: #f3f5f8;
+  min-height: 100vh;
+  padding: 24px;
+  box-sizing: border-box;
+}
+.preview-shell[data-theme='dark'] {
+  --dsw-alias-label-primary: #e6e8ec;
+  --dsw-alias-label-secondary: #a8adb8;
+  --dsw-alias-bg-layer-3: #252830;
+  --dsw-alias-border-l4: #484d59;
+  --dsw-alias-state-error-primary: #ff8b83;
+  --dsw-alias-state-success-primary: #80dba1;
+  --dsw-alias-state-business-primary: #4d70e8;
+  color-scheme: dark;
+  background: #16181d;
+}
+.preview-controls {
+  max-width: 1120px;
+  margin: 0 auto 24px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.preview-controls h1 {
+  font-size: 22px;
+  margin: 0 0 8px;
+}
+.preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+.preview-toolbar label {
+  display: grid;
+  gap: 4px;
+  min-width: 110px;
+}
+.preview-controls select,
+.preview-controls button {
+  font: inherit;
+  padding: 7px 10px;
+  color: inherit;
+  background: var(--dsw-alias-bg-layer-3);
+  border: 1px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  max-width: 100%;
+}
+.preview-controls button {
+  cursor: pointer;
+}
+.preview-controls button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.preview-scene-status {
+  font-weight: 600;
+}
+.preview-hint {
+  color: var(--dsw-alias-label-secondary);
+}
+.preview-surface {
+  width: min(100%, 744px);
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+.preview-surface[data-width='narrow'] {
+  width: min(100%, 390px);
+}
+.preview-slot,
+.preview-dock {
+  padding: 20px;
+  border: 1px solid var(--dsw-alias-border-l4);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-3);
+}
+.preview-dock {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.preview-slot-label {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+@media (max-width: 500px) {
+  .preview-shell {
+    padding: 12px;
+  }
+  .preview-controls h1 {
+    font-size: 20px;
+  }
+  .preview-slot,
+  .preview-dock {
+    padding: 14px;
+  }
+  .preview-toolbar {
+    gap: 8px;
+  }
+  .preview-toolbar label:first-child {
+    width: 100%;
+  }
+}

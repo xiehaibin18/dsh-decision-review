@@ -43,7 +43,32 @@ async function verifyClient() {
   assert.match(await readFile(new URL('cordis.patch.yml', entry), 'utf8'), /name: '@local\/decision-review'/)
 
   let registration
+  const styles = []
+  const document = {
+    createElement(tag) {
+      assert.equal(tag, 'style')
+      const style = {
+        textContent: '',
+        setAttribute(name, value) {
+          assert.equal(name, 'data-decision-review')
+          assert.equal(value, '')
+        },
+        remove() {
+          const index = styles.indexOf(style)
+          assert.notEqual(index, -1)
+          styles.splice(index, 1)
+        },
+      }
+      return style
+    },
+    head: {
+      append(style) {
+        styles.push(style)
+      },
+    },
+  }
   new Script(await readExport('/client')).runInNewContext({
+    document,
     window: {
       __ModuleLoader__: {
         load(value) {
@@ -85,9 +110,12 @@ async function verifyClient() {
       },
     },
   })
+  assert.equal(styles.length, 1)
+  assert.match(styles[0].textContent, /\.decision-review-panel/)
   assert.equal(localeRegistered, true)
   assert.deepEqual(slots, ['plugins.row.config', 'conversation.composer.dock'])
   dispose()
+  assert.equal(styles.length, 0)
   assert.equal(localeRegistered, false)
 }
 

@@ -20,7 +20,9 @@ const SERVER_SETTINGS = {
 describe('configuration panel', () => {
   let client
   let requests
+  let loadGate
   let saveGate
+  let testGate
   let saveError
   let serverSettings
   let serverProblems
@@ -59,7 +61,9 @@ describe('configuration panel', () => {
 
   beforeEach(() => {
     requests = []
+    loadGate = undefined
     saveGate = undefined
+    testGate = undefined
     saveError = undefined
     serverSettings = { ...SERVER_SETTINGS }
     serverProblems = []
@@ -68,10 +72,10 @@ describe('configuration panel', () => {
     client = createClient(
       mock(async (url, init) => {
         const body = init?.body === undefined ? undefined : JSON.parse(init.body)
-        requests.push({ url, method: init?.method ?? 'GET', headers: init?.headers, body })
+        requests.push({ url, method: init?.method ?? 'GET', headers: init?.headers, signal: init?.signal, body })
         switch (url) {
-          case '/api/decision-review/config':
-            return Response.json({
+          case '/api/decision-review/config': {
+            const response = Response.json({
               settings: serverSettings,
               problems: serverProblems,
               runtime: {
@@ -81,6 +85,9 @@ describe('configuration panel', () => {
                 paused: serverProblems.length > 0,
               },
             })
+            if (loadGate) await loadGate
+            return response
+          }
           case '/api/decision-review/save': {
             if (saveError) return Response.json({ error: saveError }, { status: 400 })
             if (saveGate) await saveGate
@@ -93,8 +100,11 @@ describe('configuration panel', () => {
             }
             return Response.json({ ok: true, settings: serverSettings, problems: [] })
           }
-          case '/api/decision-review/test':
-            return Response.json({ ok: true, results: serverResults })
+          case '/api/decision-review/test': {
+            const response = Response.json({ ok: true, results: serverResults })
+            if (testGate) await testGate
+            return response
+          }
           default:
             throw new Error(`Unexpected client request: ${url}`)
         }
@@ -176,6 +186,25 @@ describe('configuration panel', () => {
     expect(field('apikey.label').value).toBe('')
     expect(field('apikey.label').placeholder).toBe(copy('apikey.placeholder'))
     expect(button('apikey.clear')).toBeDefined()
+  })
+
+  test.serial('aborts the pending configuration load when the page closes', async () => {
+    const { promise, resolve } = Promise.withResolvers()
+    loadGate = promise
+    try {
+      await render()
+      shown('panel.loading')
+      await render('summary')
+      expect(requests[0].signal.aborted).toBe(true)
+
+      loadGate = undefined
+      serverSettings = { ...SERVER_SETTINGS, model: 'model-current' }
+      await render()
+      await act(async () => resolve())
+      expect(field('model.label').value).toBe('model-current')
+    } finally {
+      await act(async () => resolve())
+    }
   })
 
   test.serial('saves with a JSON POST that omits the key unless one was typed', async () => {
@@ -390,6 +419,23 @@ describe('configuration panel', () => {
     expect(button('test.run').disabled).toBe(true)
   })
 
+  test.serial('aborts the pending save when the page closes', async () => {
+    const { promise, resolve } = Promise.withResolvers()
+    saveGate = promise
+    try {
+      await render()
+      await change('model.label', 'model-saved')
+      await click('save')
+      const [request] = saveRequests()
+      expect(request.signal.aborted).toBe(false)
+      await render('summary')
+      expect(request.signal.aborted).toBe(true)
+    } finally {
+      await act(async () => resolve())
+    }
+    expect(text()).toBe(copy('panel.desc'))
+  })
+
   test.serial('adopts the server’s normalized values when nothing changed meanwhile', async () => {
     await render()
     await change('timeout.label', ' 15000 ')
@@ -413,6 +459,57 @@ describe('configuration panel', () => {
     const testRequest = requests.find(({ url }) => url.endsWith('/test'))
     expect(testRequest.method).toBe('POST')
     expect(testRequest.body).toEqual({})
+  })
+
+  test.serial('an edit aborts the smoke test and its late reply cannot replace a newer run', async () => {
+    const { promise, resolve } = Promise.withResolvers()
+    testGate = promise
+    serverResults = [{ scenario: 'allow', ok: false, error: 'Obsolete smoke result' }]
+    try {
+      await render()
+      await click('test.run')
+      const pending = requests.at(-1)
+      expect(pending.signal.aborted).toBe(false)
+      await change('model.label', 'model-edited')
+      expect(pending.signal.aborted).toBe(true)
+      expect(button('test.run').disabled).toBe(true)
+
+      await change('model.label', SERVER_SETTINGS.model)
+      testGate = undefined
+      serverResults = [{ scenario: 'allow', ok: false, error: 'Current smoke result' }]
+      await click('test.run')
+      expect(text()).toContain('Current smoke result')
+      await act(async () => resolve())
+      expect(text()).toContain('Current smoke result')
+      expect(text()).not.toContain('Obsolete smoke result')
+
+      await change('model.label', 'model-edited')
+      expect(text()).not.toContain('Current smoke result')
+    } finally {
+      await act(async () => resolve())
+    }
+  })
+
+  test.serial('saving aborts the smoke test and prevents another run until the save completes', async () => {
+    const smoke = Promise.withResolvers()
+    const save = Promise.withResolvers()
+    testGate = smoke.promise
+    saveGate = save.promise
+    try {
+      await render()
+      await click('test.run')
+      const pending = requests.at(-1)
+      expect(pending.signal.aborted).toBe(false)
+      await click('save')
+      expect(pending.signal.aborted).toBe(true)
+      expect(button('test.run').disabled).toBe(true)
+    } finally {
+      await act(async () => {
+        smoke.resolve()
+        save.resolve()
+      })
+    }
+    expect(button('test.run').disabled).toBe(false)
   })
 
   test.serial('shows the route’s own error when a save fails', async () => {

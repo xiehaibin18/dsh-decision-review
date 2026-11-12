@@ -1,0 +1,253 @@
+{
+  "date": "2026-11-12",
+  "baseline": "2d4f3ad00b00849e5f5e3dc665b69521ab730552",
+  "revision": "963452075e9d7e2a47a482f297143af5ed4f76c0",
+  "sourceSha256": {
+    "scripts/verify-preview.mjs": "eb57f4fae26db16624289eb056a3fb98d81e84ec8c6d7e90691193514daee3c2",
+    "scripts/preview-source-edits.mjs": "b04ef16e892f3b1d024ce725fa176a23b05808d6bf59fabac68a05a5139382d0"
+  },
+  "method": "Actual verifier imported in isolated copies; Bun.WebView Chrome methods wrap real screenshots/evaluation to inject editor saves or failures. Every case uses a separate localhost server stopped in finally.",
+  "cases": [
+    {
+      "mode": "baseline",
+      "injected": true,
+      "status": "passed",
+      "verifierStatus": "passed",
+      "checks": 16,
+      "closeCalls": 1,
+      "serverExited": true,
+      "files": [
+        {
+          "path": "src/client/panel.tsx",
+          "restored": true,
+          "editorBytesPreserved": false
+        },
+        {
+          "path": "src/client/styles.css",
+          "restored": true,
+          "editorBytesPreserved": false
+        },
+        {
+          "path": "preview/index.html",
+          "restored": true,
+          "editorBytesPreserved": null
+        }
+      ],
+      "diagnostics": [],
+      "editorPaths": [
+        "src/client/panel.tsx",
+        "src/client/styles.css"
+      ],
+      "processExitCode": 0,
+      "acceptanceFailures": []
+    },
+    {
+      "mode": "clean",
+      "injected": false,
+      "status": "passed",
+      "verifierStatus": "passed",
+      "checks": 16,
+      "closeCalls": 1,
+      "serverExited": true,
+      "files": [
+        {
+          "path": "src/client/panel.tsx",
+          "restored": true,
+          "editorBytesPreserved": null
+        },
+        {
+          "path": "src/client/styles.css",
+          "restored": true,
+          "editorBytesPreserved": null
+        },
+        {
+          "path": "preview/index.html",
+          "restored": true,
+          "editorBytesPreserved": null
+        }
+      ],
+      "diagnostics": [],
+      "acceptanceFailures": [],
+      "editorPaths": [],
+      "processExitCode": 0
+    },
+    {
+      "mode": "concurrent",
+      "injected": true,
+      "status": "failed",
+      "verifierStatus": "failed",
+      "checks": 14,
+      "closeCalls": 1,
+      "serverExited": true,
+      "files": [
+        {
+          "path": "src/client/panel.tsx",
+          "restored": false,
+          "editorBytesPreserved": true
+        },
+        {
+          "path": "src/client/styles.css",
+          "restored": false,
+          "editorBytesPreserved": true
+        },
+        {
+          "path": "preview/index.html",
+          "restored": true,
+          "editorBytesPreserved": null
+        }
+      ],
+      "diagnostics": [
+        "Error: Cannot restore src/client/panel.tsx: Concurrent edit in src/client/panel.tsx; preserving current content",
+        "Error: Cannot restore src/client/styles.css: Concurrent edit in src/client/styles.css; preserving current content"
+      ],
+      "acceptanceFailures": [
+        "Error: Cannot restore src/client/panel.tsx: Concurrent edit in src/client/panel.tsx; preserving current content",
+        "Error: Cannot restore src/client/styles.css: Concurrent edit in src/client/styles.css; preserving current content"
+      ],
+      "editorPaths": [
+        "src/client/panel.tsx",
+        "src/client/styles.css"
+      ],
+      "processExitCode": 1
+    },
+    {
+      "mode": "failure-conflict",
+      "injected": true,
+      "status": "failed",
+      "verifierStatus": "failed",
+      "checks": 13,
+      "closeCalls": 1,
+      "serverExited": true,
+      "files": [
+        {
+          "path": "src/client/panel.tsx",
+          "restored": false,
+          "editorBytesPreserved": true
+        },
+        {
+          "path": "src/client/styles.css",
+          "restored": true,
+          "editorBytesPreserved": null
+        },
+        {
+          "path": "preview/index.html",
+          "restored": true,
+          "editorBytesPreserved": null
+        }
+      ],
+      "diagnostics": [
+        "Error: INJECTED_SCREENSHOT_FAILURE",
+        "Error: Cannot restore src/client/panel.tsx: Concurrent edit in src/client/panel.tsx; preserving current content"
+      ],
+      "acceptanceFailures": [
+        "Error: INJECTED_SCREENSHOT_FAILURE",
+        "Error: Cannot restore src/client/panel.tsx: Concurrent edit in src/client/panel.tsx; preserving current content"
+      ],
+      "editorPaths": [
+        "src/client/panel.tsx"
+      ],
+      "processExitCode": 1
+    },
+    {
+      "mode": "html-conflict",
+      "injected": true,
+      "status": "failed",
+      "verifierStatus": "failed",
+      "checks": 15,
+      "closeCalls": 1,
+      "serverExited": true,
+      "files": [
+        {
+          "path": "src/client/panel.tsx",
+          "restored": true,
+          "editorBytesPreserved": null
+        },
+        {
+          "path": "src/client/styles.css",
+          "restored": true,
+          "editorBytesPreserved": null
+        },
+        {
+          "path": "preview/index.html",
+          "restored": false,
+          "editorBytesPreserved": true
+        }
+      ],
+      "diagnostics": [
+        "Error: Cannot restore preview/index.html: Concurrent edit in preview/index.html; preserving current content"
+      ],
+      "acceptanceFailures": [
+        "Error: Cannot restore preview/index.html: Concurrent edit in preview/index.html; preserving current content"
+      ],
+      "editorPaths": [
+        "preview/index.html"
+      ],
+      "processExitCode": 1
+    },
+    {
+      "mode": "setup-failure",
+      "injected": false,
+      "status": "failed",
+      "verifierStatus": "failed",
+      "checks": 0,
+      "closeCalls": 1,
+      "serverExited": true,
+      "files": [
+        {
+          "path": "src/client/panel.tsx",
+          "restored": true,
+          "editorBytesPreserved": null
+        },
+        {
+          "path": "src/client/styles.css",
+          "restored": true,
+          "editorBytesPreserved": null
+        },
+        {
+          "path": "preview/index.html",
+          "restored": true,
+          "editorBytesPreserved": null
+        }
+      ],
+      "diagnostics": [
+        "Error: INJECTED_NAVIGATION_FAILURE"
+      ],
+      "acceptanceFailures": [
+        "Error: INJECTED_NAVIGATION_FAILURE"
+      ],
+      "editorPaths": [],
+      "processExitCode": 1
+    },
+    {
+      "mode": "evidence-failure",
+      "injected": false,
+      "status": "failed",
+      "closeCalls": 1,
+      "serverExited": true,
+      "files": [
+        {
+          "path": "src/client/panel.tsx",
+          "restored": true,
+          "editorBytesPreserved": null
+        },
+        {
+          "path": "src/client/styles.css",
+          "restored": true,
+          "editorBytesPreserved": null
+        },
+        {
+          "path": "preview/index.html",
+          "restored": true,
+          "editorBytesPreserved": null
+        }
+      ],
+      "diagnostics": [
+        "Error: INJECTED_NAVIGATION_FAILURE",
+        "Error: INJECTED_EVIDENCE_FAILURE"
+      ],
+      "acceptanceFailures": [],
+      "editorPaths": [],
+      "processExitCode": 1
+    }
+  ]
+}

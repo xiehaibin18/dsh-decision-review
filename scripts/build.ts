@@ -60,6 +60,12 @@ async function bundle(target: 'server' | 'client') {
   // The manifest is emitted by the pinned bundler in this invocation.
   const metadata: BuildMetadata = JSON.parse(await readFile(metafile, 'utf8'))
   if (Object.keys(metadata.outputs).length !== 1) throw new Error(`Expected one ${target} JavaScript bundle`)
+  for (const filename of Object.keys(metadata.inputs)) {
+    if (/(^|\/)preview\//.test(filename)) throw new Error(`Preview source entered the ${target} bundle: ${filename}`)
+    if (target === 'client' && /node_modules\/(react|react-dom)(\/|$)/.test(filename)) {
+      throw new Error(`Client must use the host React instance: ${filename}`)
+    }
+  }
   for (const input of Object.values(metadata.inputs)) {
     for (const dependency of input.imports) {
       if (!dependency.external) continue

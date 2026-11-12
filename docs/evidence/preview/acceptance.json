@@ -1,0 +1,89 @@
+{
+  "date": "2026-11-12",
+  "request_origins": "localhost only",
+  "status": "passed",
+  "revision": "963452075e9d7e2a47a482f297143af5ed4f76c0",
+  "checks": [
+    {
+      "name": "Chinese/light/wide Decisions and three synthetic smoke results",
+      "details": {
+        "width": 1280,
+        "height": 913,
+        "scrollWidth": 1280,
+        "surfaceWidth": 744
+      }
+    },
+    {
+      "name": "Language/theme/width preserve unsaved draft; real narrow viewport",
+      "details": {
+        "width": 390,
+        "height": 844,
+        "scrollWidth": 390,
+        "surfaceWidth": 366
+      }
+    },
+    {
+      "name": "Successful save and HTTP reload persist normalized values"
+    },
+    {
+      "name": "English/light/narrow Follow session",
+      "details": {
+        "width": 390,
+        "height": 844,
+        "scrollWidth": 390,
+        "surfaceWidth": 366
+      }
+    },
+    {
+      "name": "Config HTTP 503 recovers by restoring endpoint and reloading"
+    },
+    {
+      "name": "Save HTTP 503 preserves draft; recovery and retry succeed"
+    },
+    {
+      "name": "Multiline text survives save/reload byte-for-byte; blank rule blocks save",
+      "details": {
+        "multiline": "  第一行\n\n  npm test -- --runInBand\nlast line | 保留空格  \n"
+      }
+    },
+    {
+      "name": "Invalid stored route/model require real validation and repair while keeping session engine"
+    },
+    {
+      "name": "Switch during delayed load cancels old scene without stale form"
+    },
+    {
+      "name": "Saving state is visible; edits made during save are not overwritten"
+    },
+    {
+      "name": "Switch during delayed smoke cancels old results"
+    },
+    {
+      "name": "Test request error recovers; mixed synthetic row error renders"
+    },
+    {
+      "name": "Stats failure recovers on polling; zero-review fixture hides pill"
+    },
+    {
+      "name": "Actual shared TSX and CSS HMR retain draft and do not navigate",
+      "details": {
+        "beforeNavigations": 1,
+        "tsxNavigations": 1,
+        "cssNavigations": 1,
+        "timeOrigin": 1794454137617.3
+      }
+    },
+    {
+      "name": "HTML entry edit triggers full reload and resets draft",
+      "details": {
+        "navigations": 2
+      }
+    },
+    {
+      "name": "All browser requests remain localhost; no uncaught runtime exceptions"
+    }
+  ],
+  "errors": [],
+  "navigations": 2,
+  "failures": []
+}
