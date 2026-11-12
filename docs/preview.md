@@ -52,7 +52,8 @@ PREVIEW_PORT=0 bun run dev
 | `preview/http.ts`、`locale.ts`、`preview.css` | 场景控制请求、语言解析及代表性宿主主题变量注入 |
 | `preview/server.ts`、`service.ts` | Bun HTML 服务、场景生命周期与模拟 HTTP 路由 |
 | `preview/scenes.ts`、`fixtures.ts` | 场景描述和合成输入 |
-| `preview/service.test.ts` | 源码侧接口、校验与生命周期回归 |
+| `preview/service.test.ts`、`verifier.test.js` | 源码侧接口、校验、生命周期及 HMR 文件还原回归 |
+| `scripts/verify-preview.mjs`、`preview-source-edits.mjs` | 真实浏览器验收、临时源码修改与内容核对清理 |
 
 预览保留真实 HTTP/JSON 边界。每次创建场景都有独立 ID，配置、保存、统计和测试使用该 ID 下的 URL；不同标签页互不覆盖。删除场景会中止等待中的保存，避免延迟结果写入后来创建的场景。浏览器卸载时尽力释放场景；异常关闭遗留的内存数据在服务退出时清空。
 
@@ -88,7 +89,7 @@ bun run verify:package
 bun run verify:host --dsh /usr/local/bin/dsh artifacts/verification/local-decision-review-0.1.0.tgz
 ```
 
-浏览器验证使用独立、临时的 Chrome 进程，保存截图与 JSON 证据到 `artifacts/browser/`。`--hmr` 会临时修改并还原本工作树的共享 TSX、CSS 和 HTML；验证时避免同时编辑这三个文件。脚本检测到并发内容变化会拒绝覆盖。省略该参数可仅检查交互。
+浏览器验证使用独立、临时的 Chrome 进程，保存截图与 JSON 证据到 `artifacts/browser/`。`--hmr` 会临时修改并还原本工作树的共享 TSX、CSS 和 HTML；验证时仍应避免同时编辑这三个文件。每次写入和还原前，脚本会核对当前内容是否仍为自己预期的版本；发现变化时保留当前文件、报告具体路径并以失败退出，不把旧快照覆盖回去。正常还原与异常清理使用同一路径，一份文件冲突或恢复失败不会阻止其余文件清理；验证错误和清理冲突共同写入失败诊断。保留下来的文件可能同时包含编辑器修改与临时 HMR 标记，应手动检查后再验证。内容检查不使用跨进程锁。浏览器在导航、验证或证据保存失败时也会关闭；由开发者另行启动的预览服务仍由开发者管理。省略该参数可仅检查交互。
 
 新增 `@types/bun` 与 `@types/react-dom` 均为开发依赖。`patches/bun-types@1.4.4.patch` 修正上游声明中四处与 Node 24 不匹配的类型引用：TextEncoder 返回值从真实方法签名取得，TLS 与 KeyObject 使用显式模块类型。固定 Bun、现有 Node 类型与第三方声明检查均保留；冻结安装会复现该补丁。
 

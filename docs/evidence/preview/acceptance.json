@@ -1,4 +1,6 @@
 {
+  "date": "2026-11-12",
+  "request_origins": "localhost only",
   "status": "passed",
   "revision": "963452075e9d7e2a47a482f297143af5ed4f76c0",
   "checks": [
@@ -68,7 +70,7 @@
         "beforeNavigations": 1,
         "tsxNavigations": 1,
         "cssNavigations": 1,
-        "timeOrigin": 1794448982937.8
+        "timeOrigin": 1794454137617.3
       }
     },
     {
@@ -83,6 +85,5 @@
   ],
   "errors": [],
   "navigations": 2,
-  "date": "2026-11-12",
-  "request_origins": "localhost only"
+  "failures": []
 }

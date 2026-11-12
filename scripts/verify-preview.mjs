@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
+import { withHmrEdits } from './preview-source-edits.mjs'
 const args = process.argv.slice(2).filter((argument) => argument !== '--')
 const target = new URL(args.find((argument) => !argument.startsWith('--')) ?? 'http://127.0.0.1:4317')
 if (target.protocol !== 'http:' || !['localhost', '127.0.0.1'].includes(target.hostname))
   throw new Error('Browser acceptance requires a localhost HTTP preview URL')
 const origin = target.origin
 const checkHmr = process.argv.includes('--hmr')
-let status = 'failed'
+const failures = []
 const evidenceDirectory = 'artifacts/browser'
 const events = []
 const requests = []
@@ -19,19 +20,6 @@ const view = new Bun.WebView({
   backend: { type: 'chrome', url: false },
   console: (type, ...args) => events.push({ type, args }),
 })
-await view.navigate('about:blank')
-await view.cdp('Network.enable')
-await view.cdp('Runtime.enable')
-view.addEventListener('Network.requestWillBeSent', (event) =>
-  requests.push({ url: event.data.request.url, method: event.data.request.method }),
-)
-view.addEventListener('Network.responseReceived', (event) => {
-  const request = requests.findLast((request) => request.url === event.data.response.url)
-  if (request) request.status = event.data.response.status
-})
-view.addEventListener('Runtime.exceptionThrown', (event) => errors.push(event.data))
-view.onNavigated = () => navigations++
-await view.navigate(origin)
 const body = () => view.evaluate('document.body.innerText')
 async function until(expression, timeout = 8000) {
   const deadline = Date.now() + timeout
@@ -111,6 +99,20 @@ function passed(name, details) {
   console.log('PASS', name, details ?? '')
 }
 try {
+  await mkdir(evidenceDirectory, { recursive: true })
+  await view.navigate('about:blank')
+  await view.cdp('Network.enable')
+  await view.cdp('Runtime.enable')
+  view.addEventListener('Network.requestWillBeSent', (event) =>
+    requests.push({ url: event.data.request.url, method: event.data.request.method }),
+  )
+  view.addEventListener('Network.responseReceived', (event) => {
+    const request = requests.findLast((request) => request.url === event.data.response.url)
+    if (request) request.status = event.data.response.status
+  })
+  view.addEventListener('Runtime.exceptionThrown', (event) => errors.push(event.data))
+  view.onNavigated = () => navigations++
+  await view.navigate(origin)
   await until(textIncludes('自动评审 12 次'))
   assert.match(await body(), /授权评审/)
   await click('运行冒烟测试（3 个场景）')
@@ -242,25 +244,30 @@ last line | 保留空格
     const panelPath = 'src/client/panel.tsx'
     const cssPath = 'src/client/styles.css'
     const htmlPath = 'preview/index.html'
-    const panel = await readFile(panelPath, 'utf8')
-    const css = await readFile(cssPath, 'utf8')
-    const html = await readFile(htmlPath, 'utf8')
-    const changedPanel = panel.replace("{t('panel.title')}", "{t('panel.title')}<span> · TSX HMR</span>")
-    const changedCss = css.replace(
-      '.decision-review-panel {',
-      `.decision-review-panel {
+    const changes = [
+      {
+        path: panelPath,
+        transform: (source) => source.replace("{t('panel.title')}", "{t('panel.title')}<span> · TSX HMR</span>"),
+      },
+      {
+        path: cssPath,
+        transform: (source) =>
+          source.replace(
+            '.decision-review-panel {',
+            `.decision-review-panel {
   outline: 3px solid rgb(231, 101, 27);`,
-    )
-    const changedHtml = html.replace('开发预览</title>', '开发预览 HTML HMR</title>')
-    assert.notEqual(panel, changedPanel)
+          ),
+      },
+      { path: htmlPath, transform: (source) => source.replace('开发预览</title>', '开发预览 HTML HMR</title>') },
+    ]
     const beforeNavigations = navigations
-    try {
-      await writeFile(panelPath, changedPanel)
+    await withHmrEdits(changes, async ({ apply, restore }) => {
+      await apply(panelPath)
       await until(textIncludes('TSX HMR'))
       assert.equal(await value('Decisions 模型'), 'hot-refresh-unsaved')
       assert.equal(await view.evaluate('performance.timeOrigin'), before.timeOrigin)
       const tsxNavigations = navigations
-      await writeFile(cssPath, changedCss)
+      await apply(cssPath)
       await until(
         `getComputedStyle(document.querySelector('.decision-review-panel')).outlineColor==='rgb(231, 101, 27)'`,
       )
@@ -273,43 +280,52 @@ last line | 保留空格
         cssNavigations: navigations,
         timeOrigin: before.timeOrigin,
       })
-      await writeFile(panelPath, panel)
-      await writeFile(cssPath, css)
+      await restore([panelPath, cssPath])
       await until(`!${textIncludes('TSX HMR')}`)
-      await writeFile(htmlPath, changedHtml)
+      await apply(htmlPath)
       await until('document.title.includes("HTML HMR")')
       await until('!!document.querySelector(".decision-review-panel")')
       assert.notEqual(await view.evaluate('performance.timeOrigin'), before.timeOrigin)
       assert.equal(await value('Decisions 模型'), 'synthetic-reviewer')
       passed('HTML entry edit triggers full reload and resets draft', { navigations })
-    } finally {
-      for (const [path, original, changed] of [
-        [panelPath, panel, changedPanel],
-        [cssPath, css, changedCss],
-        [htmlPath, html, changedHtml],
-      ]) {
-        const current = await readFile(path, 'utf8')
-        if (current === changed) await writeFile(path, original)
-        else assert.equal(current, original, `Concurrent edit in ${path}; refusing to overwrite`)
-      }
-    }
+    })
   }
   assert.deepEqual(errors, [])
   assert.ok(requests.every((request) => new URL(request.url).origin === origin))
   passed('All browser requests remain localhost; no uncaught runtime exceptions')
-  status = 'passed'
+} catch (error) {
+  failures.push(error)
 } finally {
-  await mkdir(evidenceDirectory, { recursive: true })
-  await Bun.write(
-    `${evidenceDirectory}/acceptance.json`,
-    JSON.stringify(
-      { status, revision: Bun.revision, checks, requests, console: events, errors, navigations },
-      null,
-      2,
-    ) +
-      `
-`,
-  )
-  console.log('CHECKS', checks.length, 'UNCAUGHT', errors.length)
-  view.close()
+  try {
+    view.close()
+  } catch (error) {
+    failures.push(error)
+  }
+  try {
+    await Bun.write(
+      `${evidenceDirectory}/acceptance.json`,
+      JSON.stringify(
+        {
+          status: failures.length ? 'failed' : 'passed',
+          revision: Bun.revision,
+          checks,
+          requests,
+          console: events,
+          errors,
+          navigations,
+          failures: [...new Set(failures.flatMap(failureMessages))],
+        },
+        null,
+        2,
+      ) + '\n',
+    )
+  } catch (error) {
+    failures.push(error)
+  }
+  console.log('CHECKS', checks.length, 'UNCAUGHT', errors.length, 'STATUS', failures.length ? 'failed' : 'passed')
+}
+if (failures.length) throw new AggregateError(failures, 'Preview verification failed')
+
+function failureMessages(error) {
+  return error instanceof AggregateError ? error.errors.flatMap(failureMessages) : [String(error.stack ?? error)]
 }
