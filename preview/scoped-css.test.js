@@ -19,6 +19,30 @@ describe('generated plugin stylesheet scope', () => {
     expect(() => assertScopedStylesheet(css)).toThrow('CSS selector escapes plugin scope')
   })
 
+  test.each([
+    ['quoted brackets', String.raw`.decision-review-panel[data-state="editing [draft]"] + div[data-state="ready"]`],
+    [
+      'escaped quote and brackets',
+      String.raw`.decision-review-panel[data-state='editing \'[draft]'] ~ div[data-state='ready']`,
+    ],
+    [
+      'nested function and selector list',
+      String.raw`.decision-review-panel, .decision-review-control:is(:not([data-state="editing [draft]"]), :focus-visible) + div`,
+    ],
+    ['nested modifier', String.raw`.decision-review-panel { &[data-state="editing [draft]"] + div[data-state="ready"]`],
+  ])('finds an escaping combinator after %s', (kind, selector) => {
+    const css = selector + ' { color: red; }' + (kind === 'nested modifier' ? ' }' : '')
+    expect(() => assertScopedStylesheet(css)).toThrow('CSS selector escapes plugin scope')
+  })
+
+  test.each([
+    String.raw`.dr\:gap-\[1px\+2px\], .decision-review-panel\+editor`,
+    String.raw`.decision-review-panel[data-state="a\"b [c] + ~ || , /* d */"]`,
+    String.raw`.decision-review-panel :is(:not([data-state="a ] + b"]), :has(+ label))`,
+  ])('accepts punctuation that is not a top-level combinator: %s', (selector) => {
+    expect(() => assertScopedStylesheet(selector + ' { color: red; }')).not.toThrow()
+  })
+
   test('keeps comment delimiters inside quoted attribute values', () => {
     expect(() =>
       assertScopedStylesheet(String.raw`.decision-review-panel[data-value="/* [ + ] */"] { color: red; }`),
