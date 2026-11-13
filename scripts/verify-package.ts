@@ -131,7 +131,7 @@ async function assertPackageFiles(directory: string, installerTag?: string) {
 
 async function verifyManifest(directory: string) {
   const manifest = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8'))
-  assert.equal(manifest.engines.dsh, '0.2.2-rc.1 || 0.2.2-rc.2')
+  assert.equal(manifest.engines.dsh, '0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3')
   assert.equal(manifest.engines.bun, undefined)
   assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
   assert.equal(manifest.dsh.client.platform, 'web')

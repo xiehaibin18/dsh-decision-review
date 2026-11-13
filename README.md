@@ -77,17 +77,17 @@ The bundle also observes the `approval/request` waterfall without answering, app
 
 ## Host integration requirement
 
-The tested host API target is `dsh-v0.2.2-rc.1`. Its Auto preset uses full access with `ask`; a delegated child may retain `never`.
+The plugin builds against the `dsh-v0.2.2-rc.1` host types. The host's Auto preset uses full access with `ask`; a delegated child may retain `never`.
 
-In rc.1, `permissionPresets.set()` appends no event when the selected preset and its permission values already match the effective defaults. For example, setup can explicitly select `workspace-write` on an otherwise empty new main session and still leave `session.seq === 0`. The plugin cannot distinguish this unrecorded same-value selection from no selection, so the session can subsequently default to Auto. This is a documented host-contract limitation; this plugin delivery does not modify the host or work around it.
+In unpatched rc.1 and rc.3 hosts, `permissionPresets.set()` appends no event when the selected preset and its permission values already match the effective defaults. For example, setup can explicitly select `workspace-write` on an otherwise empty new main session and still leave `session.seq === 0`. The plugin cannot distinguish this unrecorded same-value selection from no selection, so the session can subsequently default to Auto. This is a documented host-contract limitation; this plugin delivery does not modify the host or work around it.
 
 The plugin supplies localized presentation metadata as the optional second argument to `permissionPresets.registerAuto(admit, { description, confirmationDescription })`. The companion host change exposes this metadata in the permission catalog and uses it in both Auto pickers. The confirmation explains that Decisions sends review input to a separately configured endpoint/model, while Session uses the session route. The official reviewer retains its existing description when it supplies no metadata.
 
-An unpatched rc.1 host ignores the extra argument and still displays its built-in same-model confirmation; updating the plugin alone cannot correct that host-owned dialog. Host support is outside this plugin delivery, so the metadata must not be treated as a correction to the confirmation text in an unpatched installation.
+Unpatched rc.1 and rc.3 hosts ignore the extra argument and still display their built-in same-model confirmation; updating the plugin alone cannot correct that host-owned dialog. Host support is outside this plugin delivery, so the metadata must not be treated as a correction to the confirmation text in an unpatched installation.
 
 ## Development and packaging
 
-The plugin builds from strict TypeScript with separate server, React client, and shared API contracts. `bun run build` creates a self-contained package in `dist/`, including its own `package.json`, Node ESM, a DSH ModuleLoader client, locales, icon and bundle patch. The installed package needs DSH `0.2.2-rc.1` or `0.2.2-rc.2` and Node `>=24.9.0`. It has no runtime npm dependencies or install scripts.
+The plugin builds from strict TypeScript with separate server, React client, and shared API contracts. `bun run build` creates a self-contained package in `dist/`, including its own `package.json`, Node ESM, a DSH ModuleLoader client, locales, icon and bundle patch. The installed package needs DSH `0.2.2-rc.1`, `0.2.2-rc.2`, or `0.2.2-rc.3` and Node `>=24.9.0`. It has no runtime npm dependencies or install scripts.
 
 Build and install the directory into your chosen profile:
 
