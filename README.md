@@ -79,11 +79,11 @@ The bundle also observes the `approval/request` waterfall without answering, app
 
 The plugin builds against the `dsh-v0.2.2-rc.1` host types. The host's Auto preset uses full access with `ask`; a delegated child may retain `never`.
 
-In rc.1, `permissionPresets.set()` appends no event when the selected preset and its permission values already match the effective defaults. For example, setup can explicitly select `workspace-write` on an otherwise empty new main session and still leave `session.seq === 0`. The plugin cannot distinguish this unrecorded same-value selection from no selection, so the session can subsequently default to Auto. This is a documented host-contract limitation; this plugin delivery does not modify the host or work around it.
+In unpatched rc.1 and rc.3 hosts, `permissionPresets.set()` appends no event when the selected preset and its permission values already match the effective defaults. For example, setup can explicitly select `workspace-write` on an otherwise empty new main session and still leave `session.seq === 0`. The plugin cannot distinguish this unrecorded same-value selection from no selection, so the session can subsequently default to Auto. This is a documented host-contract limitation; this plugin delivery does not modify the host or work around it.
 
 The plugin supplies localized presentation metadata as the optional second argument to `permissionPresets.registerAuto(admit, { description, confirmationDescription })`. The companion host change exposes this metadata in the permission catalog and uses it in both Auto pickers. The confirmation explains that Decisions sends review input to a separately configured endpoint/model, while Session uses the session route. The official reviewer retains its existing description when it supplies no metadata.
 
-An unpatched rc.1 host ignores the extra argument and still displays its built-in same-model confirmation; updating the plugin alone cannot correct that host-owned dialog. Host support is outside this plugin delivery, so the metadata must not be treated as a correction to the confirmation text in an unpatched installation.
+Unpatched rc.1 and rc.3 hosts ignore the extra argument and still display their built-in same-model confirmation; updating the plugin alone cannot correct that host-owned dialog. Host support is outside this plugin delivery, so the metadata must not be treated as a correction to the confirmation text in an unpatched installation.
 
 ## Development and packaging
 

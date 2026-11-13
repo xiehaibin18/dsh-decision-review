@@ -1,6 +1,6 @@
 # DSH 0.2.2-rc.3 compatibility evidence
 
-The baseline was `8df209ebabab9061e23805050cece0ef1c322127`. The repair adds only the exact `0.2.2-rc.3` manifest entry, updates the package verifier's allowlist, and documents support. The rc.1 type dependencies, lockfile, and production JavaScript are unchanged.
+The initial validation below covers `ae827d3205582164e378950206be1f14e9d7d3ae` against baseline `8df209ebabab9061e23805050cece0ef1c322127`. The repair adds only the exact `0.2.2-rc.3` manifest entry, updates the package verifier's allowlist, and documents support. The rc.1 type dependencies, lockfile, and production JavaScript are unchanged. The documentation follow-up has a separate artifact record below.
 
 ## Source and runtime
 
@@ -29,3 +29,11 @@ The archive contains the same ten files, byte for byte, as the `dist` directory 
 | `dist/client.js` | `652677439f671ec2c3a964176e3412395ddcd188f94ef0e88fe095608d03321a` |
 
 Local transcripts and the configuration browser report/screenshots are in `artifacts/dsh-rc3-compat/`. The host checks used fresh temporary profiles and no version exemptions or model calls. The browser run covered the configuration page; the actual composer dock, real review execution, and the user's existing profile were not exercised. This run did not retest the older host releases.
+
+## Auto limitation documentation follow-up
+
+Independent review found that the supported rc.3 host still has both Auto limitations previously documented for rc.1: selecting unchanged permission values records no event, and `registerAuto()` ignores the presentation metadata while the host keeps its built-in same-model confirmation. README now explicitly includes unpatched rc.3 in both statements. This finding comes from host source and installed-code inspection, not an Auto-selection or model-review browser test. No host or plugin runtime behavior was changed.
+
+`git diff --check` and a fresh `bun run pack` passed. The new archive SHA-256 is `4c25766d9fb460bc65762c222f8c6171d6cd3f2d50be788a39bcb5e39f9aaf38`. Its ten files match the rebuilt `dist` byte for byte; comparison with the initial verified archive shows that only `README.md` changed. The manifest, server/client JavaScript, locales, icon, patch and license files remain identical.
+
+The earlier engineering, installed-byte, Node, host and browser results are reused for those unchanged runtime bytes; they were not rerun locally for this documentation-only follow-up. The new archive is not described as independently reinstalled. Comparison details and the pack log are in `artifacts/dsh-rc3-compat/doc-fix-artifact-comparison.json` and `doc-fix-pack.log`. The main checkout's delivered `dist` and tarball were left unchanged.
