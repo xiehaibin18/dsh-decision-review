@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Script } from 'node:vm'
+import { assertScopedStylesheet } from './check-stylesheet.mjs'
 import {
   jsonRequest,
   makeAnswers,
@@ -81,11 +82,20 @@ async function verifyClient() {
   assert.equal(registration.id, PACKAGE)
   const requires = new Set()
   const client = registration.factory((name) => {
-    assert.ok(['react', 'react/jsx-runtime'].includes(name), `Unexpected client dependency: ${name}`)
+    assert.ok(['react', 'react-dom', 'react/jsx-runtime'].includes(name), `Unexpected client dependency: ${name}`)
     requires.add(name)
+    if (name === 'react') {
+      // Base UI creates contexts and wrapper component definitions at module load time.
+      // Real behavior is exercised by the installed-byte React DOM tests and temporary DSH.
+      return {
+        createContext: () => ({}),
+        forwardRef: (component) => component,
+        memo: (component) => component,
+      }
+    }
     return {}
   })
-  assert.ok(requires.has('react'))
+  assert.deepEqual([...requires].sort(), ['react', 'react-dom', 'react/jsx-runtime'])
   assert.deepEqual(Array.from(client.inject), ['slots', 'locale'])
   const slots = []
   let localeRegistered = false
@@ -112,6 +122,8 @@ async function verifyClient() {
   })
   assert.equal(styles.length, 1)
   assert.match(styles[0].textContent, /\.decision-review-panel/)
+  assert.match(styles[0].textContent, /\.dr\\:/)
+  assertScopedStylesheet(styles[0].textContent)
   assert.equal(localeRegistered, true)
   assert.deepEqual(slots, ['plugins.row.config', 'conversation.composer.dock'])
   dispose()

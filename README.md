@@ -24,7 +24,7 @@ Saving is strict: an invalid endpoint or model, an invalid rule, an out-of-range
 
 `endpoint` and `model` default only when omitted. Explicit invalid values, including wrong types and blank strings, are rejected. Endpoints must be absolute HTTP(S) URLs without embedded credentials; invalid stored endpoint/model values pause review and must be repaired before reviews or smoke tests can send requests. They are shown blank rather than replaced by a different destination. The repair inputs remain visible even in Session mode until a valid save.
 
-Thresholds and `timeoutMs` accept only a finite number or a plain decimal string (what the form sends); other types (`false`, `true`, `[]`, objects) are rejected rather than coerced.
+The Web UI displays and edits timeout in seconds (5–600, default 60, up to three decimal places), and sends exact integer milliseconds. The five Decisions threshold sliders cover 0–1 and mark both the default and most recently saved score. A value loaded with finer precision is preserved until the slider is adjusted. The settings API accepts thresholds and `timeoutMs` as a finite number or a plain decimal string; other types (`false`, `true`, `[]`, objects) are rejected rather than coerced.
 
 Reaching `tHighPred` produces a high-risk reviewer denial, not necessarily a final denial. It still follows `denialRoute` and the session approval policy; a matched operator `deny` rule forces final denial regardless of that routing.
 

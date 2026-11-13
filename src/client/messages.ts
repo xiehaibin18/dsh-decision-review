@@ -4,6 +4,8 @@ import type { LocaleRuntime, Translate as HostTranslate } from '@deepseek-ai/dsh
 export const NS = 'decision-review'
 
 // The package metadata in locale/*.json is separate from these runtime dictionaries.
+import { TIMEOUT_SECONDS_RANGE } from './timeout.js'
+
 const en = {
   'panel.title': 'Decision Review',
   'panel.desc': 'Review tool calls in Auto mode using a separate Decisions API or the current session’s model.',
@@ -24,8 +26,8 @@ const en = {
   'apikey.clear.pending': 'The saved key will be removed when you save.',
   'apikey.clear.undo': 'Keep saved key',
   'model.label': 'Decisions model',
-  'timeout.label': 'Request timeout (ms)',
-  'timeout.hint': 'Enter an integer from 5,000 to 600,000. Applies to both engines.',
+  'timeout.label': 'Request timeout (seconds)',
+  'timeout.hint': 'Applies to both engines. Enter {min} to {max} seconds (up to 3 decimal places).',
   'denialroute.label': 'When the reviewer denies a call',
   'denialroute.hint':
     'If approval is unavailable under the session policy, the call is denied. Calls allowed by the reviewer must still pass the host’s other permission checks.',
@@ -33,7 +35,12 @@ const en = {
   'denialroute.final': 'Deny the call and send the reason to the session model',
   'thresholds.title': 'Decisions thresholds (advanced)',
   'thresholds.hint':
-    'Use values from 0 to 1. Leave a field blank to restore its default. The authorization score is used for medium risk and rules that require explicit authorization.',
+    'Adjust from 0 to 1. Enter an exact value next to each slider. The flags show the default and last saved scores. The authorization score is used for medium risk and rules that require explicit authorization.',
+  'thresholds.exact': '{field}, exact value',
+  'thresholds.invalid': 'Enter a number from 0 to 1.',
+  'thresholds.default': 'Default {value}',
+  'thresholds.saved': 'Saved {value}',
+  'thresholds.same': 'Default / Saved {value}',
   'thresholds.tConf': 'tConf — Minimum confidence for risk classification and rule matches',
   'thresholds.tHighPred': 'tHighPred — Data exfiltration score that triggers high risk',
   'thresholds.tMedPred': 'tMedPred — Medium risk signal when classification confidence is low',
@@ -42,6 +49,7 @@ const en = {
   save: 'Save',
   saving: 'Saving…',
   saved: 'Settings saved.',
+  'save.fieldsInvalid': 'Correct the highlighted settings before saving: {fields}.',
   'save.invalid': 'Fix the highlighted rules before saving.',
   'load.error': 'Could not load settings.',
   'save.error': 'Could not save settings.',
@@ -63,7 +71,7 @@ const en = {
   'issue.endpoint': 'The Decisions API URL must be an absolute HTTP or HTTPS URL without embedded credentials.',
   'issue.model': 'Enter the Decisions model name.',
   'issue.threshold': '{field} must be a number from 0 to 1.',
-  'issue.timeout': 'The request timeout must be a whole number from {min} to {max} milliseconds.',
+  'issue.timeout': 'Enter a timeout from {min} to {max} seconds, with up to 3 decimal places.',
   'issue.rules_list': 'Custom rules must be provided as a list.',
   'issue.rule_invalid': 'Rule {n} needs a valid verdict and a non-empty condition.',
   'issue.rule_count': 'Rule {n} exceeds the limit of {max} rules.',
@@ -127,8 +135,14 @@ const en = {
   'test.basis.error': 'The reviewer could not complete this scenario.',
   'pill.label': '{n} reviewed · {p}% auto-passed',
   'pill.label.unavailable': '{n} reviewed · Auto-pass rate unavailable',
-  'pill.title':
-    'Auto review this session: {n} calls · {auto} auto-passed · {asked} sent for approval · {denied} blocked · Review failures: {failed}',
+  'pill.title': 'Review stats',
+  'pill.total': 'Total reviewed: {n}',
+  'pill.rate': 'Auto-pass rate',
+  'pill.unavailable': 'Unavailable',
+  'pill.allowed': 'Auto-passed',
+  'pill.asked': 'Sent for approval',
+  'pill.blocked': 'Blocked',
+  'pill.failed': 'Review failures',
 }
 
 type MessageKey = keyof typeof en
@@ -152,14 +166,20 @@ const zh = {
   'apikey.clear.pending': '保存时将移除已保存的密钥。',
   'apikey.clear.undo': '保留已保存的密钥',
   'model.label': 'Decisions 模型',
-  'timeout.label': '请求超时（毫秒）',
-  'timeout.hint': '输入 5,000 到 600,000 之间的整数。对两种引擎都生效。',
+  'timeout.label': '请求超时（秒）',
+  'timeout.hint': '对两种引擎都生效。可输入 {min} 到 {max} 秒，最多三位小数。',
   'denialroute.label': '评审拒绝调用时',
   'denialroute.hint': '会话策略不允许人工审批时，调用会被拒绝。评审放行后，仍须通过宿主的其他权限检查。',
   'denialroute.ask': '会话允许时转人工审批',
   'denialroute.final': '直接拒绝，并将原因返回给会话模型',
   'thresholds.title': 'Decisions 阈值（高级）',
-  'thresholds.hint': '输入 0 到 1 之间的数值，留空可恢复默认值。授权分数用于中风险判断及要求明确授权的规则。',
+  'thresholds.hint':
+    '可在 0 到 1 之间调整，也可在滑块旁输入精确值。旗标标出默认值和上次保存值。授权分数用于中风险判断及要求明确授权的规则。',
+  'thresholds.exact': '{field}，精确值',
+  'thresholds.invalid': '请输入 0 到 1 之间的数值。',
+  'thresholds.default': '默认 {value}',
+  'thresholds.saved': '已保存 {value}',
+  'thresholds.same': '默认 / 已保存 {value}',
   'thresholds.tConf': 'tConf — 风险分类和规则匹配的最低置信度',
   'thresholds.tHighPred': 'tHighPred — 数据外传触发高风险的分数',
   'thresholds.tMedPred': 'tMedPred — 分类置信度不足时的中风险信号阈值',
@@ -168,6 +188,7 @@ const zh = {
   save: '保存',
   saving: '正在保存…',
   saved: '设置已保存。',
+  'save.fieldsInvalid': '保存前请修正这些设置：{fields}。',
   'save.invalid': '请修正有提示的规则后再保存。',
   'load.error': '无法加载设置。',
   'save.error': '无法保存设置。',
@@ -188,7 +209,7 @@ const zh = {
   'issue.endpoint': 'Decisions API 地址必须是完整的 HTTP 或 HTTPS URL，且不能包含用户名或密码。',
   'issue.model': '请输入 Decisions 模型名称。',
   'issue.threshold': '{field} 必须是 0 到 1 之间的数值。',
-  'issue.timeout': '请求超时必须是 {min} 到 {max} 毫秒之间的整数。',
+  'issue.timeout': '请输入 {min} 到 {max} 秒之间的超时时间，最多三位小数。',
   'issue.rules_list': '自定义规则必须以列表形式提供。',
   'issue.rule_invalid': '规则 {n} 必须包含有效的评审结论和非空的匹配条件。',
   'issue.rule_count': '加入规则 {n} 会超出 {max} 条规则的上限。',
@@ -251,7 +272,14 @@ const zh = {
   'test.basis.error': '评审未能完成此场景。',
   'pill.label': '自动评审 {n} 次 · 自动放行率 {p}%',
   'pill.label.unavailable': '自动评审 {n} 次 · 暂无自动放行率',
-  'pill.title': '本次会话自动评审 {n} 次：自动放行 {auto} · 转人工审批 {asked} · 阻止 {denied} · 评审失败 {failed}',
+  'pill.title': '评审统计',
+  'pill.total': '评审总数：{n}',
+  'pill.rate': '自动放行率',
+  'pill.unavailable': '暂无',
+  'pill.allowed': '自动放行',
+  'pill.asked': '转人工审批',
+  'pill.blocked': '阻止',
+  'pill.failed': '评审失败',
 } satisfies Record<MessageKey, string>
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -265,6 +293,7 @@ export type Translate = HostTranslate<MessageKey>
 export type ResolveText = LocaleRuntime['resolveText']
 
 export function settingsIssueText(t: Translate, issue: SettingsIssue, stored = false): string {
+  if (issue.code === 'timeout') return t('issue.timeout', TIMEOUT_SECONDS_RANGE)
   const message = t(`issue.${issue.code}`, issue.params)
   return stored && issue.code.startsWith('rule_') ? t('problems.rule_omitted', { issue: message }) : message
 }

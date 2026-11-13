@@ -76,7 +76,7 @@ JUnit 位于 `artifacts/test/junit.xml`，文本覆盖率输出到日志，LCOV 
 
 ## 安装产物和生产 Node
 
-`verify:package` 冻结安装两个独立源码副本，检查类型并构建，比较 tarball SHA-256。它将 `dist/` 复制到源码树之外，在各自的空缓存中离线安装目录和 tarball，并比较安装后九个文件的内容。两种形式分别由独立 Node 子进程从包名加载，验证导出、资源及关键行为。生产消费目录没有源码和开发依赖，Node 进程使用隔离环境和无 Bun 的 PATH。Bun 通过独立测试目录在相同的安装字节上重跑完整回归，包括真实 React/jsdom。Node 验证入口只使用 Node 内置 API 和共用合成 fixtures，不另建长期分叉的业务套件。
+`verify:package` 冻结安装两个独立源码副本，检查类型并构建，比较 tarball SHA-256。它将 `dist/` 复制到源码树之外，在各自的空缓存中离线安装目录和 tarball，并逐字节比较安装后的文件。两种形式分别由独立 Node 子进程从包名加载，验证导出、资源及关键行为。生产消费目录没有源码和开发依赖，Node 进程使用隔离环境和无 Bun 的 PATH。Bun 通过独立测试目录在相同的安装字节上重跑完整回归，包括真实 React/jsdom。客户端探针也检查共享 React DOM 的允许清单和无全局主题或 reset 的生成 CSS；涉及弹层的变化要在缩放后的共享预览和实际宿主中验证键盘、点击位置及裁切。Node 验证入口只使用 Node 内置 API 和共用合成 fixtures，不另建长期分叉的业务套件。
 
 构建、安装和 Node 验证证据保存在 `artifacts/verification/`。目录受 Git 忽略，CI 会上传作为限时保留的构建附件；失败日志用于定位具体阶段。真实 DSH 的加载、认证 HTTP 和资源交付仍使用现有独立入口：
 
@@ -99,10 +99,10 @@ CI 不安装或启动真实 DSH，也不声称完成宿主验收。该入口的�
 
 ## Preview boundaries
 
-`bun run test` and `bun run test:ci` also include `preview/service.test.ts` and `preview/verifier.test.js` in the same isolated Bun invocation. The service checks exercise the real settings normalizer through synthetic HTTP requests: write-only keys, strict validation, per-session isolation, invalid-config repair, multiline round trips, fault recovery, test-list validation, cancellation and the deterministic composer. The existing preload still rejects unexpected provider fetches. `bun run test:preview` runs just these source-only checks.
+`bun run test` and `bun run test:ci` also include `preview/service.test.ts`, `preview/verifier.test.js` and `preview/scoped-css.test.js` in the same isolated Bun invocation. The service checks exercise the real settings normalizer through synthetic HTTP requests: write-only keys, strict validation, per-session isolation, invalid-config repair, multiline round trips, fault recovery, test-list validation, cancellation and the deterministic composer. The CSS checks accept scoped selector lists and nested modifiers while rejecting rules that escape the plugin scope. The existing preload still rejects unexpected provider fetches. `bun run test:preview` runs just these source-only checks.
 
 The installed-byte suite remains `test/` only: its production tests load the packed `dist/`, including the new shared-client lifecycle checks. Preview sources are deliberately absent from that harness and the consumer. The Node probe now also checks the injected stylesheet's registration and disposal. Build metadata rejects preview sources and bundled React/React DOM in production client output.
 
-Real browser checks are separate from unit tests: see [preview acceptance](preview-acceptance.md). Run `bun run verify:preview -- http://127.0.0.1:PORT --hmr` against a running preview to exercise the interface and temporarily edit/restore the shared TSX/CSS and HTML entry. It uses a fresh Bun.WebView Chrome process and writes local evidence under `artifacts/browser/`; it is optional and is not part of headless CI.
+Real browser checks are separate from unit tests: see [preview acceptance](preview-acceptance.md). Run `bun run verify:preview -- http://127.0.0.1:PORT --hmr` against a running preview to exercise the interface and temporarily edit/restore the shared TSX, CSS, Tailwind input, and HTML entry. It uses a fresh Bun.WebView Chrome process and writes local evidence under `artifacts/browser/`; it is optional and is not part of headless CI.
 
 `preview/verifier.test.js` executes the HMR source-edit helper used by the real browser verifier in isolated Bun subprocesses. It checks final file bytes and nonzero exits for normal-path editor saves, validation failure with an editor save, HTML conflicts, changes before probe application and unreadable restore targets. A conflict in one file must leave its contents intact while other owned edits are restored, and diagnostics must retain both validation and restore failures. These source-only checks do not need Chrome and are excluded from the installed-byte regression harness. Real-browser conflict probes and cleanup evidence are recorded in [preview acceptance](preview-acceptance.md).

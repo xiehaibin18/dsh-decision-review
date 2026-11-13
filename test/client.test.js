@@ -41,10 +41,8 @@ describe('configuration panel', () => {
 
   function field(key, index = 0) {
     const caption = copy(key)
-    const labels = [...client.container.querySelectorAll('label')].filter(
-      (label) => label.firstElementChild?.textContent === caption,
-    )
-    const control = labels[index]?.querySelector('input, select, textarea')
+    const labels = [...client.container.querySelectorAll('label')].filter((label) => label.textContent === caption)
+    const control = labels[index]?.control
     expect(control, `Missing field: ${caption} at index ${index}`).toBeDefined()
     return control
   }
@@ -53,13 +51,68 @@ describe('configuration panel', () => {
     return client.change(field(key, index), value)
   }
 
+  function choose(key, option, index) {
+    return client.choose(field(key, index), copy(option))
+  }
+
+  function radioGroup(key) {
+    const caption = copy(key)
+    const group = [...client.container.querySelectorAll('[role="radiogroup"]')].find(
+      (candidate) =>
+        client.window.document.getElementById(candidate.getAttribute('aria-labelledby'))?.textContent === caption,
+    )
+    expect(group, `Missing radio group: ${caption}`).toBeDefined()
+    return group
+  }
+
+  function radio(key, option) {
+    const button = [...radioGroup(key).querySelectorAll('[role="radio"]')].find(
+      (node) => node.textContent === copy(option),
+    )
+    expect(button, `Missing radio option: ${copy(option)}`).toBeDefined()
+    return button
+  }
+
+  function checkedRadio(key) {
+    const checked = radioGroup(key).querySelectorAll('[role="radio"][aria-checked="true"]')
+    expect(checked).toHaveLength(1)
+    return checked[0].textContent
+  }
+
+  function threshold(name) {
+    const slider = [...client.container.querySelectorAll('input[type="range"]')].find((input) =>
+      client.window.document
+        .getElementById(input.getAttribute('aria-labelledby'))
+        ?.textContent.startsWith(name + ' — '),
+    )
+    expect(slider, `Missing threshold: ${name}`).toBeDefined()
+    return slider
+  }
+
+  function thresholdFlags(name) {
+    const slider = threshold(name)
+    return slider
+      .getAttribute('aria-describedby')
+      .split(' ')
+      .slice(1)
+      .map((id) => client.window.document.getElementById(id)?.textContent)
+  }
+
+  async function pressThreshold(name, key) {
+    await act(async () => {
+      const slider = threshold(name)
+      slider.focus()
+      slider.dispatchEvent(new client.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+    })
+  }
+
   async function click(key, params) {
     const control = button(key, params)
     expect(control, `Missing button: ${copy(key, params)}`).toBeDefined()
     await act(async () => control.click())
   }
 
-  beforeEach(() => {
+  beforeEach(async () => {
     requests = []
     loadGate = undefined
     saveGate = undefined
@@ -110,7 +163,7 @@ describe('configuration panel', () => {
         }
       }),
     )
-    client.load()
+    await client.load()
   })
 
   afterEach(async () => {
@@ -152,7 +205,7 @@ describe('configuration panel', () => {
     test.serial('repairs an invalid stored Decisions endpoint without switching the Session engine', async () => {
       serverSettings = { ...serverSettings, engine: 'session', endpoint: '' }
       await open([{ code: 'endpoint' }])
-      expect(field('engine.label').value).toBe('session')
+      expect(checkedRadio('engine.label')).toBe(copy('engine.session'))
       shown('engine.repair')
       expect(field('endpoint.label').value).toBe('')
       expect(field('model.label').value).toBe('model-a')
@@ -166,7 +219,7 @@ describe('configuration panel', () => {
       const [request] = saveRequests()
       expect(request.body.settings.endpoint).toBe('https://api.example.test/v1/decisions')
       expect(request.body.settings.engine).toBe('session')
-      expect(field('engine.label').value).toBe('session')
+      expect(checkedRadio('engine.label')).toBe(copy('engine.session'))
       shown('runtime.status', { state: copy('runtime.accepting') })
       hidden('engine.repair')
       hidden('endpoint.label')
@@ -225,13 +278,42 @@ describe('configuration panel', () => {
     expect(field('apikey.label').value).toBe('')
   })
 
-  test.serial('can ask the host to remove the stored key', async () => {
+  test.serial('defers key removal to Save and lets the user cancel it', async () => {
     await render()
+    const remove = button('apikey.clear')
+    expect(remove.dataset.variant).toBe('destructive')
     await click('apikey.clear')
-    expect(button('apikey.clear.undo')).toBeDefined()
+    expect(button('apikey.clear.undo').dataset.variant).toBe('outline')
+    expect(field('apikey.label').disabled).toBe(true)
+    expect(saveRequests()).toHaveLength(0)
+    await click('apikey.clear.undo')
+    expect(field('apikey.label').disabled).toBe(false)
+    expect(saveRequests()).toHaveLength(0)
     await click('save')
-    expect(saveRequests()[0].body.settings.clearApiKey).toBe(true)
+    expect(saveRequests()[0].body.settings).not.toHaveProperty('clearApiKey')
+    await click('apikey.clear')
+    await click('save')
+    expect(saveRequests()[1].body.settings.clearApiKey).toBe(true)
     expect(button('apikey.clear')).toBeUndefined()
+  })
+
+  test.serial('binary radio groups persist one required choice even if clicked again', async () => {
+    await render()
+    for (const key of ['engine.label', 'denialroute.label']) {
+      const group = radioGroup(key)
+      expect(group.getAttribute('aria-required')).toBe('true')
+      expect(group.querySelectorAll('[role="radio"]')).toHaveLength(2)
+      expect(client.window.document.getElementById(group.getAttribute('aria-describedby'))?.textContent).toBeTruthy()
+    }
+    expect(checkedRadio('engine.label')).toBe(copy('engine.decisions'))
+    expect(checkedRadio('denialroute.label')).toBe(copy('denialroute.ask'))
+    await act(async () => radio('engine.label', 'engine.session').click())
+    await act(async () => radio('denialroute.label', 'denialroute.final').click())
+    await act(async () => radio('denialroute.label', 'denialroute.final').click())
+    expect(checkedRadio('engine.label')).toBe(copy('engine.session'))
+    expect(checkedRadio('denialroute.label')).toBe(copy('denialroute.final'))
+    await click('save')
+    expect(saveRequests()[0].body.settings).toMatchObject({ engine: 'session', denialRoute: 'final' })
   })
 
   describe('operator rules', () => {
@@ -243,16 +325,16 @@ describe('configuration panel', () => {
       shown('rules.summary', { count: 0, maxCount: 20, total: 0, maxTotal: 2000 })
       await click('rules.add')
       hidden('rules.empty.title')
-      expect(field('rules.verdict.label').value).toBe('ask')
+      expect(field('rules.verdict.label').textContent).toBe(copy('rules.verdict.ask'))
       await condition('Other rule')
       await click('rules.add')
       const multiline = '\n  Deploy service A | service B.\n  Only if the destination is production｜not preview.\n'
       await condition(multiline, 1)
-      await change('rules.verdict.label', 'deny', 1)
+      await choose('rules.verdict.label', 'rules.verdict.deny', 1)
       await click('rules.remove.named', { n: 1 })
 
       expect(field('rules.condition.label').value).toBe(multiline)
-      expect(field('rules.verdict.label').value).toBe('deny')
+      expect(field('rules.verdict.label').textContent).toBe(copy('rules.verdict.deny'))
       shown('rules.condition.length', { count: multiline.length, max: 400 })
       shown('rules.summary', { count: 1, maxCount: 20, total: multiline.length, maxTotal: 2000 })
       expect(button('test.run').disabled).toBe(true)
@@ -264,7 +346,7 @@ describe('configuration panel', () => {
       await client.unmount()
       await render()
       expect(field('rules.condition.label').value).toBe(multiline)
-      expect(field('rules.verdict.label').value).toBe('deny')
+      expect(field('rules.verdict.label').textContent).toBe(copy('rules.verdict.deny'))
       await click('rules.remove.named', { n: 1 })
       shown('rules.empty.title')
       await click('save')
@@ -320,14 +402,14 @@ describe('configuration panel', () => {
       await render()
       await click('rules.add')
       await condition('Deny production deploys')
-      await change('rules.verdict.label', 'deny')
+      await choose('rules.verdict.label', 'rules.verdict.deny')
       expect(text()).toMatch(/“Deny” always blocks a matched call/)
-      await change('engine.label', 'session')
+      await act(async () => radio('engine.label', 'engine.session').click())
       expect(text()).toMatch(/the approval setting above still applies/)
       expect(text()).not.toMatch(/always blocks a matched call/)
       expect(button('test.run').disabled).toBe(true)
       expect(field('rules.condition.label').value).toBe('Deny production deploys')
-      expect(field('rules.verdict.label').value).toBe('deny')
+      expect(field('rules.verdict.label').textContent).toBe(copy('rules.verdict.deny'))
     })
   })
 
@@ -397,22 +479,129 @@ describe('configuration panel', () => {
     })
   })
 
+  test.serial('five thresholds load and save exact numeric values without editing the sliders', async () => {
+    const values = { tConf: 0.7525, tHighPred: 0, tMedPred: 1, tStrongPred: 0.8, tAuth: 0.700001 }
+    serverSettings = { ...serverSettings, ...values }
+    await render()
+    expect(client.container.querySelectorAll('input[type="range"]')).toHaveLength(5)
+    for (const [name, value] of Object.entries(values)) {
+      const slider = threshold(name)
+      expect(slider.min).toBe('0')
+      expect(slider.max).toBe('1')
+      expect(slider.step).toBe('0.01')
+      expect(slider.getAttribute('aria-valuenow')).toBe(String(value))
+      expect(slider.getAttribute('aria-valuetext')).toBe(String(value))
+    }
+    expect(thresholdFlags('tConf')).toEqual(['Default 0.75', 'Saved 0.7525'])
+    expect(thresholdFlags('tHighPred')).toEqual(['Default 0.85', 'Saved 0'])
+    expect(thresholdFlags('tMedPred')).toEqual(['Default 0.5', 'Saved 1'])
+    expect(thresholdFlags('tStrongPred')).toEqual(['Default / Saved 0.8'])
+    await click('save')
+    expect(saveRequests()[0].body.settings).toMatchObject(values)
+    await client.unmount()
+    await render()
+    expect(threshold('tConf').getAttribute('aria-valuenow')).toBe('0.7525')
+    expect(thresholdFlags('tConf')).toEqual(['Default 0.75', 'Saved 0.7525'])
+  })
+
+  test.serial('restores an off-grid threshold with the exact editor after moving its slider', async () => {
+    serverSettings.tConf = 0.756
+    await render()
+    await pressThreshold('tConf', 'ArrowRight')
+    await pressThreshold('tConf', 'ArrowLeft')
+    expect(threshold('tConf').getAttribute('aria-valuenow')).toBe('0.76')
+    const input = client.container.querySelector('input[aria-label="tConf, exact value"]')
+    expect(input).not.toBeNull()
+    await client.change(input, '0.756')
+    expect(threshold('tConf').getAttribute('aria-valuenow')).toBe('0.756')
+    await click('save')
+    expect(saveRequests()[0].body.settings.tConf).toBe(0.756)
+    expect(thresholdFlags('tConf')).toEqual(['Default 0.75', 'Saved 0.756'])
+  })
+
+  test.serial('announces invalid timeout beside Save without a request', async () => {
+    await render()
+    await change('timeout.label', '4.999')
+    await click('save')
+    expect(saveRequests()).toHaveLength(0)
+    const notice = button('save').parentElement.querySelector('[role="alert"]')
+    expect(notice?.textContent).toContain('Request timeout (seconds)')
+    await act(async () => notice.querySelector('button').click())
+    expect(client.window.document.activeElement).toBe(field('timeout.label'))
+    client.language = 'zh'
+    await render()
+    expect(notice.textContent).toContain('请求超时（秒）')
+  })
+
+  test.serial('can open a collapsed threshold and focus its invalid exact input from Save', async () => {
+    await render()
+    const input = client.container.querySelector('input[aria-label="tConf, exact value"]')
+    await client.change(input, '1.01')
+    const details = input.closest('details')
+    expect(details.open).toBe(false)
+    await click('save')
+    expect(saveRequests()).toHaveLength(0)
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+    const notice = button('save').parentElement.querySelector('[role="alert"] button')
+    await act(async () => notice.click())
+    expect(details.open).toBe(true)
+    expect(client.window.document.activeElement).toBe(input)
+  })
+
+  test.serial('threshold flags keep the saved value on failure and track the response during newer edits', async () => {
+    await render()
+    expect(thresholdFlags('tConf')).toEqual(['Default / Saved 0.75'])
+    await pressThreshold('tConf', 'ArrowRight')
+    expect(threshold('tConf').getAttribute('aria-valuenow')).toBe('0.76')
+    expect(thresholdFlags('tConf')).toEqual(['Default / Saved 0.75'])
+
+    saveError = 'Synthetic save rejection'
+    await click('save')
+    shown('save.error')
+    expect(saveRequests()[0].body.settings.tConf).toBe(0.76)
+    expect(threshold('tConf').getAttribute('aria-valuenow')).toBe('0.76')
+    expect(thresholdFlags('tConf')).toEqual(['Default / Saved 0.75'])
+    saveError = undefined
+
+    const { promise, resolve } = Promise.withResolvers()
+    saveGate = promise
+    try {
+      await click('save')
+      expect(saveRequests()[1].body.settings.tConf).toBe(0.76)
+      expect(button('saving').disabled).toBe(true)
+      await pressThreshold('tConf', 'ArrowRight')
+      expect(threshold('tConf').getAttribute('aria-valuenow')).toBe('0.77')
+      expect(thresholdFlags('tConf')).toEqual(['Default / Saved 0.75'])
+    } finally {
+      await act(async () => resolve())
+    }
+    expect(threshold('tConf').getAttribute('aria-valuenow')).toBe('0.77')
+    expect(thresholdFlags('tConf')).toEqual(['Default 0.75', 'Saved 0.76'])
+    await click('save')
+    expect(saveRequests()[2].body.settings.tConf).toBe(0.77)
+    expect(thresholdFlags('tConf')).toEqual(['Default 0.75', 'Saved 0.77'])
+  })
+
   test.serial('does not overwrite edits made while a save is in flight', async () => {
     const { promise, resolve } = Promise.withResolvers()
     saveGate = promise
     await render()
     await change('model.label', 'model-saved')
+    await change('timeout.label', '5.001')
     await click('rules.add')
     await change('rules.condition.label', 'Condition to save')
     try {
       await click('save')
       expect(button('saving').disabled).toBe(true)
       await change('model.label', 'typed-while-saving')
+      await change('timeout.label', '5.2')
       await change('rules.condition.label', 'Condition to save\nWith a newer edit')
     } finally {
       await act(async () => resolve())
     }
     expect(field('model.label').value).toBe('typed-while-saving')
+    expect(field('timeout.label').value).toBe('5.2')
+    expect(serverSettings.timeoutMs).toBe(5001)
     expect(field('rules.condition.label').value).toBe('Condition to save\nWith a newer edit')
     expect(serverSettings.model).toBe('model-saved')
     expect(serverSettings.rules).toEqual([{ condition: 'Condition to save', verdict: 'ask' }])
@@ -438,11 +627,62 @@ describe('configuration panel', () => {
 
   test.serial('adopts the server’s normalized values when nothing changed meanwhile', async () => {
     await render()
-    await change('timeout.label', ' 15000 ')
+    await change('timeout.label', ' 15.100 ')
     await click('save')
-    expect(saveRequests()[0].body.settings.timeoutMs).toBe(' 15000 ')
-    expect(field('timeout.label').value).toBe('15000')
+    expect(saveRequests()[0].body.settings.timeoutMs).toBe(15100)
+    expect(field('timeout.label').value).toBe('15.1')
     expect(button('test.run').disabled).toBe(false)
+  })
+
+  test.serial.each([
+    [5000, '5'],
+    [5001, '5.001'],
+    [5200, '5.2'],
+    [60000, '60'],
+    [600000, '600'],
+  ])('displays and saves %i ms without changing persisted precision', async (ms, seconds) => {
+    serverSettings.timeoutMs = ms
+    await render()
+    expect(field('timeout.label').value).toBe(seconds)
+    await click('save')
+    expect(saveRequests()[0].body.settings).toHaveProperty('timeoutMs', ms)
+    expect(saveRequests()[0].body.settings).not.toHaveProperty('timeoutSeconds')
+    await client.unmount()
+    await render()
+    expect(field('timeout.label').value).toBe(seconds)
+  })
+
+  test.serial.each(['', ' ', '4.999', '600.001', '5.0001', '1e2', 'bad'])(
+    'rejects timeout %j locally with a linked error in seconds',
+    async (input) => {
+      await render()
+      await change('timeout.label', input)
+      await click('save')
+      expect(saveRequests()).toHaveLength(0)
+      const timeout = field('timeout.label')
+      expect(timeout.getAttribute('aria-invalid')).toBe('true')
+      const descriptions = timeout.getAttribute('aria-describedby').split(' ')
+      expect(client.window.document.getElementById(descriptions.at(-1)).textContent).toContain('5 to 600 seconds')
+      client.language = 'zh'
+      await render()
+      expect(client.window.document.getElementById(descriptions.at(-1)).textContent).toContain('5 到 600 秒')
+      expect(field('timeout.label').value).toBe(input)
+      await change('timeout.label', '5.001')
+      expect(field('timeout.label').hasAttribute('aria-invalid')).toBe(false)
+      await click('save')
+      expect(saveRequests()[0].body.settings.timeoutMs).toBe(5001)
+    },
+  )
+
+  test.serial('renders a structured stored timeout problem in seconds', async () => {
+    serverProblems = [{ code: 'timeout', params: { min: 5000, max: 600000 } }]
+    await render()
+    expect(text()).toContain('5 to 600 seconds')
+    expect(text()).not.toContain('milliseconds')
+    client.language = 'zh'
+    await render()
+    expect(text()).toContain('5 到 600 秒')
+    expect(text()).not.toContain('600000')
   })
 
   test.serial('runs the smoke test only against saved settings', async () => {
@@ -514,8 +754,8 @@ describe('configuration panel', () => {
 
   test.serial('shows the route’s own error when a save fails', async () => {
     await render()
-    saveError = 'decision-review: timeoutMs must be an integer between 5000 and 600000'
-    await change('timeout.label', '12.5')
+    saveError = 'decision-review: model rejected by the synthetic route'
+    await change('model.label', 'rejected-model')
     await click('save')
     shown('save.error')
     shown('error.details')

@@ -14,6 +14,7 @@ import { ConfigPanel } from './panel.js'
 import { ApprovalStatsPill } from './stats-pill.js'
 import css from './styles.css' with { type: 'text' }
 import { NOTE } from './styles.js'
+import controlCss from './ui/control-styles.generated.css' with { type: 'text' }
 
 export const inject = ['slots', 'locale']
 
@@ -43,7 +44,7 @@ export function apply(ctx: Context): () => void {
 
   const style = document.createElement('style')
   style.setAttribute('data-decision-review', '')
-  style.textContent = css
+  style.textContent = css + '\n' + controlCss
   document.head.append(style)
   return () => {
     style.remove()

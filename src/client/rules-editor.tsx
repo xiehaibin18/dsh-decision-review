@@ -6,7 +6,12 @@ import {
   RULE_MAX_TOTAL,
   RULE_VERDICTS,
   type ReviewEngine,
+  type RuleVerdict,
 } from '../shared/contracts.js'
+import { Button } from './ui/button.js'
+import { Field, FieldLabel } from './ui/field.js'
+import { Textarea } from './ui/textarea.js'
+import { SelectField } from './select-field.js'
 import type { Translate } from './messages.js'
 import { conditionProblem, isRuleVerdict, type DraftRule, type RuleChanges, type validateRules } from './rules.js'
 
@@ -19,6 +24,7 @@ interface RuleEditorProps {
   showMissing: boolean
   autoFocus: boolean
   conditionRef: React.Ref<HTMLTextAreaElement>
+  popupContainer: HTMLElement | null
   baseId: string
 }
 
@@ -31,6 +37,7 @@ function RuleEditor({
   showMissing,
   autoFocus,
   conditionRef,
+  popupContainer,
   baseId,
 }: RuleEditorProps) {
   const n = index + 1
@@ -40,65 +47,57 @@ function RuleEditor({
   const verdictErrorId = baseId + '-verdict-error'
   const problem = conditionProblem(rule.condition)
   const conditionError = problem !== 'rules.error.required' || showMissing ? problem : null
-  const verdictInvalid = !isRuleVerdict(rule.verdict)
+  const verdict = isRuleVerdict(rule.verdict) ? rule.verdict : null
+  const verdictId = baseId + '-verdict'
+  const conditionId = baseId + '-condition'
 
   return (
     <section aria-labelledby={headingId} className="decision-review-rule">
       <div className="decision-review-rule-header">
         <h3 id={headingId}>{t('rules.item', { n })}</h3>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onRemove}
           aria-label={t('rules.remove.named', { n })}
-          className="decision-review-rules-button decision-review-rule-remove"
+          className="decision-review-rule-remove"
         >
           {t('rules.remove')}
-        </button>
+        </Button>
       </div>
-      <div className="decision-review-rule-field">
-        <label className="decision-review-rule-label">
-          <span>{t('rules.verdict.label')}</span>
-          <select
-            value={verdictInvalid ? '' : rule.verdict}
-            onChange={(event) => onChange({ verdict: event.target.value })}
-            aria-invalid={verdictInvalid || undefined}
-            aria-describedby={verdictInvalid ? verdictErrorId : undefined}
-            className="decision-review-rule-input decision-review-rule-verdict"
-          >
-            {verdictInvalid && (
-              <option value="" disabled>
-                {t('rules.error.verdict')}
-              </option>
-            )}
-            {RULE_VERDICTS.map((verdict) => (
-              <option value={verdict} key={verdict}>
-                {t(`rules.verdict.${verdict}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-        {verdictInvalid && (
+      <Field>
+        <FieldLabel htmlFor={verdictId}>{t('rules.verdict.label')}</FieldLabel>
+        <SelectField<RuleVerdict>
+          id={verdictId}
+          className="decision-review-rule-verdict"
+          container={popupContainer}
+          value={verdict}
+          items={RULE_VERDICTS.map((value) => ({ value, label: t(`rules.verdict.${value}`) }))}
+          onChange={(value) => onChange({ verdict: value })}
+          placeholder={t('rules.error.verdict')}
+          aria-invalid={verdict === null || undefined}
+          aria-describedby={verdict === null ? verdictErrorId : undefined}
+        />
+        {verdict === null && (
           <p id={verdictErrorId} className="decision-review-rules-note" data-error>
             {t('rules.error.verdict')}
           </p>
         )}
-      </div>
-      <div className="decision-review-rule-field">
-        <label className="decision-review-rule-label">
-          <span>{t('rules.condition.label')}</span>
-          <textarea
-            ref={conditionRef}
-            value={rule.condition}
-            onChange={(event) => onChange({ condition: event.target.value })}
-            placeholder={t('rules.condition.placeholder')}
-            rows={4}
-            autoFocus={autoFocus}
-            aria-required
-            aria-invalid={conditionError ? true : undefined}
-            aria-describedby={conditionError ? conditionErrorId + ' ' + lengthId : lengthId}
-            className="decision-review-rule-input decision-review-rule-condition"
-          />
-        </label>
+      </Field>
+      <Field>
+        <FieldLabel htmlFor={conditionId}>{t('rules.condition.label')}</FieldLabel>
+        <Textarea
+          id={conditionId}
+          ref={conditionRef}
+          value={rule.condition}
+          onChange={(event) => onChange({ condition: event.target.value })}
+          placeholder={t('rules.condition.placeholder')}
+          rows={4}
+          autoFocus={autoFocus}
+          aria-required
+          aria-invalid={conditionError ? true : undefined}
+          aria-describedby={conditionError ? conditionErrorId + ' ' + lengthId : lengthId}
+        />
         <div className="decision-review-rule-details">
           {conditionError && (
             <span id={conditionErrorId} className="decision-review-rules-note" data-error>
@@ -113,7 +112,7 @@ function RuleEditor({
             {t('rules.condition.length', { count: rule.condition.length, max: RULE_MAX_CONDITION })}
           </span>
         </div>
-      </div>
+      </Field>
     </section>
   )
 }
@@ -121,6 +120,7 @@ function RuleEditor({
 interface RulesEditorProps {
   t: Translate
   engine: ReviewEngine
+  popupContainer: HTMLElement | null
   rules: DraftRule[]
   validation: ReturnType<typeof validateRules>
   onAdd: () => void
@@ -133,6 +133,7 @@ interface RulesEditorProps {
 export function RulesEditor({
   t,
   engine,
+  popupContainer,
   rules,
   validation,
   onAdd,
@@ -190,6 +191,7 @@ export function RulesEditor({
             {rules.map((rule, index) => (
               <li key={rule.id}>
                 <RuleEditor
+                  popupContainer={popupContainer}
                   baseId={sectionId + '-rule-' + rule.id}
                   t={t}
                   rule={rule}
@@ -207,16 +209,16 @@ export function RulesEditor({
             ))}
           </ol>
         )}
-        <button
+        <Button
+          variant="outline"
           ref={addButton}
-          type="button"
           disabled={atCountLimit}
-          className="decision-review-rules-button decision-review-rules-add"
+          className="decision-review-rules-add"
           onClick={onAdd}
         >
           <span aria-hidden>+ </span>
           {t('rules.add')}
-        </button>
+        </Button>
       </div>
     </section>
   )

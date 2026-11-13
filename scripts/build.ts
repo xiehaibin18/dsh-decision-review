@@ -4,11 +4,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sourceManifest from '../package.json' with { type: 'json' }
+import { assertScopedStylesheet } from './check-stylesheet.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const staging = await mkdtemp(join(tmpdir(), 'decision-review-build-'))
 // React is owned by the host's ModuleLoader. Other library imports are bundled.
-const sharedClientModules = ['react', 'react/jsx-runtime']
+const sharedClientModules = ['react', 'react/jsx-runtime', 'react-dom']
 const manifest = {
   name: sourceManifest.name,
   version: sourceManifest.version,
@@ -33,7 +34,7 @@ const manifest = {
 }
 
 interface BuildMetadata {
-  inputs: Record<string, { imports: { path: string; external?: boolean }[] }>
+  inputs: Record<string, unknown>
   outputs: Record<string, unknown>
 }
 
@@ -53,7 +54,7 @@ async function bundle(target: 'server' | 'client') {
       `--format=${target === 'server' ? 'esm' : 'cjs'}`,
       `--outfile=${output}`,
       `--metafile=${metafile}`,
-      ...(target === 'client' ? sharedClientModules.map((name) => `--external=${name}`) : []),
+      ...(target === 'client' ? ['--production', ...sharedClientModules.map((name) => `--external=${name}`)] : []),
     ],
     { cwd: root, stdio: 'inherit' },
   )
@@ -66,20 +67,23 @@ async function bundle(target: 'server' | 'client') {
       throw new Error(`Client must use the host React instance: ${filename}`)
     }
   }
-  for (const input of Object.values(metadata.inputs)) {
-    for (const dependency of input.imports) {
-      if (!dependency.external) continue
-      const allowed =
-        target === 'server' ? dependency.path.startsWith('node:') : sharedClientModules.includes(dependency.path)
-      if (!allowed) throw new Error(`Unexpected ${target} runtime dependency: ${dependency.path}`)
-    }
+  const text = await readFile(output, 'utf8')
+  // Inspect emitted runtime imports: Bun also marks some tree-shaken re-exports as external in input metadata.
+  for (const dependency of new Bun.Transpiler({ loader: 'js' }).scanImports(text)) {
+    const allowed =
+      target === 'server' ? dependency.path.startsWith('node:') : sharedClientModules.includes(dependency.path)
+    if (!allowed) throw new Error(`Unexpected ${target} runtime dependency: ${dependency.path}`)
   }
-  return readFile(output, 'utf8')
+  return text
 }
 
 try {
   const serverText = await bundle('server')
   const clientText = await bundle('client')
+  const controlCss = await readFile(join(root, 'src/client/ui/control-styles.generated.css'), 'utf8')
+  if (!controlCss.includes('.dr\\:')) throw new Error('Missing prefixed controls CSS')
+  assertScopedStylesheet(controlCss)
+  assertScopedStylesheet(await readFile(join(root, 'src/client/styles.css'), 'utf8'))
   // DSH serves a classic script and supplies require inside this factory.
   const registeredClient = `window.__ModuleLoader__.load({
   id: ${JSON.stringify(manifest.name)},

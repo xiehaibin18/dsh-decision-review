@@ -26,6 +26,7 @@ bun install --frozen-lockfile
 | `src/server/index.ts` | 宿主插件入口；设置、快照、两个评审引擎、裁决、路由和记录各自独立 |
 | `src/client/index.ts` | DSH 入口；slot、locale、共享 React 与样式生命周期适配 |
 | `src/client/*.tsx`、`api.ts`、`messages.ts`、`styles.*` | 宿主与预览共用的真实组件、类型化 HTTP 客户端、文案和样式 |
+| `src/client/ui/`、`components.json` | 本地维护的官方 shadcn/ui Base UI 源码、Tailwind 输入与 registry 配置 |
 | `preview/` | Bun HTML/TSX 入口、中文控制区、内存 HTTP 场景服务和开发测试；不进入安装包 |
 | `src/shared/contracts.ts` | 插件拥有的设置、规则限制和 HTTP 消息类型 |
 | `assets/` | patch、图标与插件元数据的中英文 locale |
@@ -35,7 +36,7 @@ bun install --frozen-lockfile
 
 服务器和客户端分别进行严格类型检查，构建与打包脚本使用 Node API；独立预览服务使用 Bun API，单独进行严格类型检查。宿主类型来自固定版本的官方 npm 包；其声明引用的一些可选依赖也作为开发依赖显式安装。Bun 使用 hoisted 布局，TypeScript 保留包的符号链接解析路径，以便这些声明找到依赖。没有关闭第三方声明检查，也没有把宿主服务替换为自造类型。客户端额外声明了上游类型文件引用的 KaTeX CSS 副作用资源。
 
-服务端构建目标明确为 Node ESM，产物仅保留 Node 内置模块导入。客户端输出 CJS 后包装为 DSH 的 `window.__ModuleLoader__.load` 工厂：只有 React 与 JSX runtime 可以从宿主共享模块表取用，其他普通运行依赖默认打包。当前生产客户端只需要 React；官方宿主依赖全是 type-only 导入，运行时不会加载这些开发包。构建会检查外部依赖清单，不允许意外遗留宿主包导入。产物不包含源码映射、本机绝对路径或开发服务器地址。
+服务端构建目标明确为 Node ESM，产物仅保留 Node 内置模块导入。客户端输出 CJS 后包装为 DSH 的 `window.__ModuleLoader__.load` 工厂：只从宿主共享模块表取用 `react`、`react/jsx-runtime` 和 `react-dom`。Base UI 与样式辅助库进入客户端生产包，宿主类型包只用于编译，Tailwind 只用于生成 CSS。构建检查输入元数据和最终 JavaScript 导入，防止打入第二份 React 或留下未声明的运行时导入。产物不包含源码映射、本机绝对路径或开发服务器地址。
 
 ## 维护约定
 
@@ -107,7 +108,7 @@ dsh plugin --profile YOUR_PROFILE add ./artifacts/local-decision-review-0.1.0.tg
 
 安装只需要完整的 `dist/` 或 tarball 与支持版本的 DSH。构建工具、源码和开发依赖不进入交付包。启用本插件时，官方 auto-review 插件应保持禁用；两者使用同一个 Auto 集成槽位。
 
-本阶段保留 PR #2 的生命周期、授权、无损多行规则和 i18n 行为。DSH rc.1 的同值权限选择不写事件，以及未修改宿主忽略 Auto presentation metadata 的限制仍然存在，详见 README。配置面板、规则和测试结果现已整理为共享 TSX 组件，Bun 热更新预览见[独立预览说明](preview.md)。UI 库接入和整体重设计仍属后续阶段。
+本阶段保留 PR #2 的生命周期、授权、无损多行规则和 i18n 行为。DSH rc.1 的同值权限选择不写事件，以及未修改宿主忽略 Auto presentation metadata 的限制仍然存在，详见 README。配置面板、规则和测试结果现已整理为共享 TSX 组件，Bun 热更新预览见[独立预览说明](preview.md)。配置与规则的基础控件已接入 shadcn/ui 的 Base UI 版本。
 
 类型迁移保留了合法输入的原有裁决与协议。解析边界有两处小调整：评审日志中的非对象 JSON 记录会被跳过；部分畸形 Decisions 字段返回明确的校验错误，仍然失败关闭。公开辅助函数原有的数字字符串置信度比较和空拒绝原因回退也保留了回归覆盖。
 
@@ -115,6 +116,8 @@ dsh plugin --profile YOUR_PROFILE add ./artifacts/local-decision-review-0.1.0.tg
 
 使用 `bun run dev` 启动仅绑定 `127.0.0.1` 的预览；可用 `PREVIEW_PORT=0` 自动选择空闲端口。具体场景、热更新语义、组件边界、类型声明补丁和浏览器验收命令见[独立预览说明](preview.md)。安装包验收同时运行源码侧预览测试；已安装字节回归只运行生产业务与测试防线用例，预览服务不会进入消费目录。
 
-## UI 选型原型
+## 表单控件与样式
 
-规则编辑器的局部 UI 与样式评估见 [UI 组件与样式选型验证](ui-style-evaluation.md)。该分支原型采用原生 React 控件和插件作用域 CSS；Base UI 完成隔离类型/构建探针，shadcn 与 Tailwind 为文档比较。它不代表全量接入或部署已获批准。
+配置面板和规则编辑器使用 [shadcn/ui Base UI 的接入方案](ui-style-evaluation.md#当前接入决策)。`build` 与 `dev` 都用冻结的 Tailwind CLI 从 `src/client/ui/control-styles.css` 编译同一个忽略提交的 `control-styles.generated.css`；开发服务另起一个随服务退出的 CSS watcher。Tailwind 扫描只包含同目录控件 TSX；布局和宿主颜色变量仍由插件作用域 CSS 管理。
+
+升级 registry 组件时，先在临时目录取出固定上游源码，再逐个合并所需改动；`components.json` 记录 Base Nova、前缀及本地路径。保留 React 18 的引用转发、表单语义和本地 Portal。构建和隔离 Node 探针检查最终 CSS 的每个选择器：选择器列表中的每一项必须从 `dr:` 工具类或 `decision-review-` 类开始。只允许项目当前使用的分组规则和有父级作用域的嵌套修饰，拒绝全局选择器、越出插件范围的同级选择器、Preflight 和未加前缀的内部变量。与浏览器 bundle 一同分发的第三方许可记录在 `assets/LICENSE.client`。

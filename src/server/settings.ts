@@ -4,12 +4,16 @@ import {
   RULE_MAX_COUNT,
   RULE_MAX_TOTAL,
   RULE_VERDICTS,
+  THRESHOLD_DEFAULTS,
+  TIMEOUT_MAX_MS,
+  TIMEOUT_MIN_MS,
   type OperatorRule,
   type PublicSettings,
   type ReviewSettings,
   type SettingsIssue,
   type Threshold,
 } from '../shared/contracts.js'
+import { numericValue } from '../shared/decimal-number.js'
 import { errorCode, isRecord } from './json.js'
 
 export const SETTINGS_FILE = 'decision-review.settings.json'
@@ -41,15 +45,8 @@ const SETTINGS_DEFAULTS: SettingsDefaults = {
   // (official semantics: ask sessions prompt the user, never sessions final-
   // deny); 'final' always final-denies and feeds the reason back to the model.
   denialRoute: 'ask',
-  tConf: 0.75,
-  tHighPred: 0.85,
-  tMedPred: 0.5,
-  tStrongPred: 0.8,
-  tAuth: 0.7,
+  ...THRESHOLD_DEFAULTS,
 }
-
-const TIMEOUT_MIN_MS = 5000
-const TIMEOUT_MAX_MS = 600000
 
 /** Record one rejected stored value. A stored value that had to be replaced
  * stops review (every call that needs it is denied, see `apply`) until valid
@@ -111,19 +108,6 @@ function normalizeDecisionsRoute(
   if (strict) throw new SettingsValidationError(issue, `decision-review: ${field} must be ${requirement}`)
   reportStoredProblem(problems, issue, `stored ${field} must be ${requirement}; enter a valid value to resume review`)
   return ''
-}
-
-const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i
-
-/** The number a stored or submitted value stands for: a finite number or a
- * plain decimal string (what the settings form sends). Anything else is NaN,
- * so the coercions of `Number()` never decide a setting: `false` and `[]`
- * would become 0, `true` would become 1, and a hostile object can make it
- * throw. */
-function numericValue(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string' && DECIMAL_NUMBER.test(value.trim())) return Number(value)
-  return Number.NaN
 }
 
 /** Validate one numeric threshold into [0,1]. Strict mode (user saves) throws;

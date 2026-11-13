@@ -1,0 +1,17 @@
+{
+  "main_baseline": "d6555c050b1cc23f42359aed05ba7e9b6dee99ce",
+  "baseline_client": {
+    "raw": 57134,
+    "gzip9": 15521,
+    "sha256": "162c94450e2edb6c41b881dd8dfb3070043bfd1cf11eea26a9ae664645f6bd08"
+  },
+  "final_client": {
+    "raw": 276970,
+    "gzip9": 90722,
+    "sha256": "42e19e65d6aec2a1d139a166a70baf96f915acae45c33f75d460a73d970394dd"
+  },
+  "tarball_bytes": 125147,
+  "tarball_sha256": "47c77738611f46b60dd0f3964a0b39091c98296ae58b28f0f35aeb0e401935ee",
+  "node": "v24.22.2",
+  "final_archive_matches_workspace_client": true
+}

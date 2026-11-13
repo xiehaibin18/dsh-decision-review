@@ -1,0 +1,69 @@
+{
+  "status": "passed_with_scope_limits",
+  "reviewed_head": "50aa6b101e665449d53161ad2677135833d32a5d",
+  "base": "d6555c050b1cc23f42359aed05ba7e9b6dee99ce",
+  "source_fingerprint": {
+    "algorithm": "SHA-256 of sorted repository-relative product paths, NUL, file SHA-256, LF; includes src, scripts, preview, assets, test, patches, package.json, bun.lock, bunfig.toml and tsconfig files",
+    "files": 98,
+    "sha256": "e657ab11ff420fe5b8cf3f1d3e91d1c7586ad588c862ff4e62d4b77732b51ce7"
+  },
+  "checks": {
+    "focused_before": {
+      "pass": 13,
+      "fail": 4
+    },
+    "focused_after": {
+      "pass": 17,
+      "fail": 0
+    },
+    "engineering": {
+      "pass": 305,
+      "fail": 0
+    },
+    "package": {
+      "status": "passed",
+      "node": "v24.22.2",
+      "installed_tests": {
+        "pass": 267,
+        "fail": 0
+      },
+      "directory_and_tarball_offline": true
+    }
+  },
+  "counterexample": {
+    "selector": ".decision-review-panel[data-state=\"editing [draft]\"] + div[data-state=\"ready\"] { color: rgb(1, 2, 3); }",
+    "results": [
+      {
+        "revision": "reviewed-head",
+        "direct_guard_exit": 0,
+        "clean_build_exit": 0,
+        "counterexample_build_exit": 0,
+        "installed_counterexample_probe_exit": 0,
+        "diagnostic": null,
+        "clean_client_sha256": "652677439f671ec2c3a964176e3412395ddcd188f94ef0e88fe095608d03321a"
+      },
+      {
+        "revision": "fixed",
+        "direct_guard_exit": 1,
+        "clean_build_exit": 0,
+        "counterexample_build_exit": 1,
+        "installed_counterexample_probe_exit": 1,
+        "diagnostic": "CSS selector escapes plugin scope: .decision-review-panel[data-state=\"editing [draft]\"] + div[data-state=\"ready\"]",
+        "clean_client_sha256": "652677439f671ec2c3a964176e3412395ddcd188f94ef0e88fe095608d03321a"
+      }
+    ]
+  },
+  "bytes": {
+    "archive_sha256": "69aacc2aa1d8a82cff78330213e75b753d8911fde305c3129f1e365fb594198a",
+    "client_sha256": "652677439f671ec2c3a964176e3412395ddcd188f94ef0e88fe095608d03321a",
+    "matches_reviewed_head_byte_for_byte": true
+  },
+  "reused": {
+    "preview": "review-fixes.json: 24 groups, unchanged UI source and exact client bytes",
+    "host": "Previously recorded isolated DSH configuration evidence; no host or model check rerun"
+  },
+  "limits": [
+    "Actual DSH statistics dock remains unverified.",
+    "No real profiles, deployment, or model calls."
+  ]
+}

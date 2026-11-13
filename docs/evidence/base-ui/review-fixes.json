@@ -1,0 +1,67 @@
+{
+  "status": "passed_with_scope_limits",
+  "reviewed_head": "ef77ebef36310d3ee8c6e7ccbedbd9324e1c64dd",
+  "source_fingerprint": {
+    "algorithm": "SHA-256 of sorted repository-relative product paths, NUL, file SHA-256, LF; includes src, scripts, preview, assets, test, patches, package.json, bun.lock, bunfig.toml and tsconfig files",
+    "files": 98,
+    "sha256": "840c07da4716772d0289a043a1a68822988aa18fca5c6bdf2be7ecb750b9509c"
+  },
+  "check": {
+    "passed": 296,
+    "failed": 0
+  },
+  "preview": {
+    "passed": 24,
+    "exact_and_validation": {
+      "name": "Exact thresholds restore off-grid values; invalid settings block requests and remain visible beside Save",
+      "details": {
+        "text": "Correct the highlighted settings before saving: Request timeout (seconds), tConf.",
+        "visible": true
+      }
+    },
+    "screenshots": [
+      "review-fixes-exact-threshold.png",
+      "review-fixes-save-validation.png"
+    ]
+  },
+  "regressions": {
+    "before": {
+      "off_grid_restore": "failed: no exact input after the slider snapped to 0.76",
+      "timeout_feedback": "failed: no alert at Save"
+    },
+    "after": {
+      "off_grid_restore": "0.756 saved after moving off the value; flags and reload preserve it",
+      "timeout_feedback": "at 520 × 600, inline alert is visible and its action focuses the invalid timeout; no POST",
+      "higher_precision": "0.70000123456789 retained on reload"
+    },
+    "css_body_counterexample": [
+      {
+        "revision": "review-head",
+        "clean_build": 0,
+        "body_build": 0,
+        "installed_body_node_probe": 0
+      },
+      {
+        "revision": "fixed",
+        "clean_build": 0,
+        "body_build": 1,
+        "installed_body_node_probe": 1
+      }
+    ]
+  },
+  "package": {
+    "report": "review-fixes-package.json",
+    "prior_tarball_sha256": "47c77738611f46b60dd0f3964a0b39091c98296ae58b28f0f35aeb0e401935ee",
+    "tarball_sha256": "69aacc2aa1d8a82cff78330213e75b753d8911fde305c3129f1e365fb594198a",
+    "client_sha256": "652677439f671ec2c3a964176e3412395ddcd188f94ef0e88fe095608d03321a",
+    "client_raw": 279164,
+    "client_gzip9": 91400,
+    "node": "v24.22.2",
+    "installed_tests_passed": 267
+  },
+  "limits": [
+    "Actual DSH stats dock remains unverified.",
+    "Previous installed-host configuration browser evidence describes the reviewed head; no host browser rerun for these changes.",
+    "No real profiles or model calls."
+  ]
+}

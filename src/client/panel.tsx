@@ -11,29 +11,23 @@ import {
   type TestResult,
   type Threshold,
 } from '../shared/contracts.js'
+import { numericValue } from '../shared/decimal-number.js'
 import { reportError, type ApiError, type ReviewApi } from './api.js'
-import { Field, TechnicalDetails } from './components.js'
+import { ChoiceField } from './choice-field.js'
+import { SettingField, TechnicalDetails } from './components.js'
 import { settingsIssueText, type ResolveText, type Translate } from './messages.js'
 import { RulesEditor } from './rules-editor.js'
 import { draftRules, ruleData, validateRules, type DraftRule, type RuleChanges } from './rules.js'
 import { SmokeTest } from './smoke-test.js'
-import {
-  ACTION_BAR,
-  BUTTON,
-  CARD,
-  DANGER,
-  ERROR_NOTE,
-  HEADING,
-  INPUT,
-  NOTE,
-  PRIMARY_BUTTON,
-  STACK,
-  buttonStyle,
-} from './styles.js'
+import { ACTION_BAR, CARD, DANGER, ERROR_NOTE, HEADING, NOTE } from './styles.js'
+import { ThresholdEditor } from './threshold-editor.js'
+import { formatTimeoutSeconds, parseTimeoutSeconds, TIMEOUT_SECONDS_RANGE } from './timeout.js'
+import { Button } from './ui/button.js'
+import { Input } from './ui/input.js'
 
-type NumericField = Threshold | 'timeoutMs'
-type TextField = NumericField | 'endpoint' | 'model'
-type DraftSettings = Omit<PublicSettings, 'rules' | NumericField> & Record<NumericField, number | string>
+type TextField = 'endpoint' | 'model'
+type DraftSettings = Omit<PublicSettings, 'rules' | 'timeoutMs' | Threshold> &
+  Record<Threshold, number | string> & { timeoutSeconds: string }
 
 interface ConfigPanelProps {
   t: Translate
@@ -84,7 +78,8 @@ export function ConfigPanel({ t, resolveText, api }: ConfigPanelProps) {
 
 function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps & { initialConfig: ConfigResponse }) {
   const { rules: storedRules, ...initialFields } = initialConfig.settings
-  const [settings, setSettings] = React.useState<DraftSettings>(initialFields)
+  const [popupContainer, setPopupContainer] = React.useState<HTMLDivElement | null>(null)
+  const [settings, setSettings] = React.useState(() => draftSettings(initialFields))
   const [rules, setRules] = React.useState<DraftRule[]>(() => draftRules(storedRules, { current: 1 }))
   const [problems, setProblems] = React.useState(initialConfig.problems)
   const [error, setError] = React.useState<ApiError | null>(null)
@@ -96,7 +91,7 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
   // The form holds a typed replacement key or a request to remove the stored key.
   const [apiKeyInput, setApiKeyInput] = React.useState('')
   const [clearKey, setClearKey] = React.useState(false)
-  const [baseline, setBaseline] = React.useState(() => savedForm(settings, rules))
+  const [baseline, setBaseline] = React.useState(() => savedForm(settings, rules, initialFields))
   const nextRuleId = React.useRef(rules.length + 1)
   const lastAddedId = React.useRef<number | null>(null)
   // A save response must not overwrite edits made while it was in flight.
@@ -120,11 +115,18 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
     }
   }, [])
 
+  // A running preview can retain a baseline created before the threshold editor was added.
+  const savedThresholds = baseline.thresholds ?? initialConfig.settings
   const isDecisions = settings.engine === 'decisions'
   const repairingDecisions = !isDecisions && baseline.needsDecisionsRepair
   const showDecisionsFields = isDecisions || repairingDecisions
   const dirty = formSnapshot(settings, rules, apiKeyInput, clearKey) !== baseline.snapshot
   const validation = validateRules(rules)
+  const parsedThresholds = parseThresholds(settings)
+  const invalidThresholds = isDecisions ? THRESHOLDS.filter((field) => parsedThresholds[field] === null) : []
+  const timeoutMs = parseTimeoutSeconds(settings.timeoutSeconds)
+  const invalidFieldNames = [...(timeoutMs === null ? [t('timeout.label')] : []), ...invalidThresholds]
+  const timeoutError = showMissing && timeoutMs === null ? t('issue.timeout', TIMEOUT_SECONDS_RANGE) : null
   const keyStatus = clearKey ? t('apikey.clear.pending') : settings.hasApiKey ? t('apikey.saved') : ''
   const { runtime } = initialConfig
   const runtimeState = !runtime ? 'runtime.pending' : runtime.accepting ? 'runtime.accepting' : 'runtime.closed'
@@ -167,15 +169,36 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
     setRules((prev) => prev.filter((rule) => rule.id !== id))
   }
 
+  function focusInvalidSetting(event: React.MouseEvent<HTMLButtonElement>) {
+    const panel = event.currentTarget.closest('.decision-review-panel')
+    const input = panel?.querySelector<HTMLInputElement>(
+      'input.decision-review-timeout[aria-invalid=true], input.decision-review-threshold-value[aria-invalid=true]',
+    )
+    const details = input?.closest('details')
+    if (details) details.open = true
+    input?.focus()
+  }
+
   async function save() {
     if (saveRequest.current) return
-    if (!validation.valid) {
+    if (!validation.valid || timeoutMs === null || invalidThresholds.length) {
       setShowMissing(true)
       return
     }
     const startVersion = editVersion.current
-    const { hasApiKey, ...fields } = settings
-    const update: SettingsUpdate = { ...fields, rules: ruleData(validation.rules) }
+    const { hasApiKey, timeoutSeconds, ...fields } = settings
+    const { tConf, tHighPred, tMedPred, tStrongPred, tAuth } = parsedThresholds
+    const update: SettingsUpdate = {
+      ...fields,
+      // When following the session, a hidden invalid draft must not replace the last saved value.
+      tConf: tConf ?? savedThresholds.tConf,
+      tHighPred: tHighPred ?? savedThresholds.tHighPred,
+      tMedPred: tMedPred ?? savedThresholds.tMedPred,
+      tStrongPred: tStrongPred ?? savedThresholds.tStrongPred,
+      tAuth: tAuth ?? savedThresholds.tAuth,
+      timeoutMs,
+      rules: ruleData(validation.rules),
+    }
     if (apiKeyInput !== '') update.apiKey = apiKeyInput
     if (clearKey) update.clearApiKey = true
     const controller = new AbortController()
@@ -188,9 +211,10 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
     try {
       const payload = await api.saveSettings(update, signal)
       if (signal.aborted) return
-      const { rules: persistedRules, ...savedFields } = payload.settings
+      const { rules: persistedRules, ...persistedFields } = payload.settings
+      const savedFields = draftSettings(persistedFields)
       const savedRules = draftRules(persistedRules, nextRuleId, rules)
-      setBaseline(savedForm(savedFields, savedRules))
+      setBaseline(savedForm(savedFields, savedRules, persistedFields))
       if (editVersion.current === startVersion) {
         setSettings(savedFields)
         setRules(savedRules)
@@ -233,27 +257,25 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
     }
   }
 
-  function textInput(
-    field: TextField,
-    label: string,
-    hint?: string | null,
-    inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'],
-  ) {
+  function textInput(field: TextField, label: string, inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']) {
     return (
-      <Field key={field} label={label} hint={hint}>
-        <input
-          type="text"
-          inputMode={inputMode}
-          value={settings[field] ?? ''}
-          style={INPUT}
-          onChange={(event) => setField(field, event.target.value)}
-        />
-      </Field>
+      <SettingField label={label}>
+        {(control) => (
+          <Input
+            {...control}
+            type="text"
+            inputMode={inputMode}
+            value={settings[field]}
+            onChange={(event) => setField(field, event.target.value)}
+          />
+        )}
+      </SettingField>
     )
   }
 
   return (
     <div className="decision-review-panel">
+      <div className="decision-review-overlays" ref={setPopupContainer} />
       <div style={{ display: 'grid', gap: 4 }}>
         <h2 style={HEADING}>{t('panel.title')}</h2>
         <p style={NOTE}>{t('panel.desc')}</p>
@@ -281,38 +303,40 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
         </div>
       )}
 
-      <Field label={t('engine.label')} hint={t('engine.hint')}>
-        <select
-          value={settings.engine}
-          onChange={(event) => setField('engine', event.target.value as ReviewEngine)}
-          style={INPUT}
-        >
-          <option value="decisions">{t('engine.decisions')}</option>
-          <option value="session">{t('engine.session')}</option>
-        </select>
-      </Field>
+      <ChoiceField<ReviewEngine>
+        label={t('engine.label')}
+        hint={t('engine.hint')}
+        value={settings.engine}
+        items={[
+          { value: 'decisions', label: t('engine.decisions') },
+          { value: 'session', label: t('engine.session') },
+        ]}
+        onChange={(value) => setField('engine', value)}
+      />
       {repairingDecisions && <p style={NOTE}>{t('engine.repair')}</p>}
-      {showDecisionsFields && textInput('endpoint', t('endpoint.label'), null, 'url')}
+      {showDecisionsFields && textInput('endpoint', t('endpoint.label'), 'url')}
       {isDecisions && (
         <div>
-          <Field label={t('apikey.label')} hint={[keyStatus, t('apikey.hint')].filter(Boolean).join(' ')}>
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={apiKeyInput}
-              placeholder={settings.hasApiKey && !clearKey ? t('apikey.placeholder') : undefined}
-              onChange={(event) => {
-                markEdited()
-                setApiKeyInput(event.target.value)
-              }}
-              disabled={clearKey}
-              style={INPUT}
-            />
-          </Field>
+          <SettingField label={t('apikey.label')} hint={[keyStatus, t('apikey.hint')].filter(Boolean).join(' ')}>
+            {(control) => (
+              <Input
+                {...control}
+                type="password"
+                autoComplete="new-password"
+                value={apiKeyInput}
+                placeholder={settings.hasApiKey && !clearKey ? t('apikey.placeholder') : undefined}
+                onChange={(event) => {
+                  markEdited()
+                  setApiKeyInput(event.target.value)
+                }}
+                disabled={clearKey}
+              />
+            )}
+          </SettingField>
           {settings.hasApiKey && (
-            <button
-              type="button"
-              style={{ ...BUTTON, marginTop: 6 }}
+            <Button
+              variant={clearKey ? 'outline' : 'destructive'}
+              style={{ marginTop: 6 }}
               onClick={() => {
                 markEdited()
                 setApiKeyInput('')
@@ -320,26 +344,39 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
               }}
             >
               {t(clearKey ? 'apikey.clear.undo' : 'apikey.clear')}
-            </button>
+            </Button>
           )}
         </div>
       )}
       {showDecisionsFields && textInput('model', t('model.label'))}
-      <Field label={t('denialroute.label')} hint={t('denialroute.hint')}>
-        <select
-          value={settings.denialRoute ?? 'ask'}
-          onChange={(event) => setField('denialRoute', event.target.value as DenialRoute)}
-          style={INPUT}
-        >
-          <option value="ask">{t('denialroute.ask')}</option>
-          <option value="final">{t('denialroute.final')}</option>
-        </select>
-      </Field>
-      {textInput('timeoutMs', t('timeout.label'), t('timeout.hint'), 'numeric')}
+      <ChoiceField<DenialRoute>
+        label={t('denialroute.label')}
+        hint={t('denialroute.hint')}
+        value={settings.denialRoute ?? 'ask'}
+        items={[
+          { value: 'ask', label: t('denialroute.ask') },
+          { value: 'final', label: t('denialroute.final') },
+        ]}
+        onChange={(value) => setField('denialRoute', value)}
+      />
+      <SettingField label={t('timeout.label')} hint={t('timeout.hint', TIMEOUT_SECONDS_RANGE)} error={timeoutError}>
+        {(control) => (
+          <Input
+            {...control}
+            type="text"
+            inputMode="decimal"
+            value={settings.timeoutSeconds}
+            onChange={(event) => setField('timeoutSeconds', event.target.value)}
+            aria-invalid={timeoutError ? true : undefined}
+            className="decision-review-timeout"
+          />
+        )}
+      </SettingField>
 
       <RulesEditor
         t={t}
         engine={settings.engine}
+        popupContainer={popupContainer}
         rules={rules}
         validation={validation}
         showMissing={showMissing}
@@ -349,24 +386,32 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
         onRemove={removeRule}
       />
       {isDecisions && (
-        <details>
-          <summary style={{ fontWeight: 600, cursor: 'pointer' }}>{t('thresholds.title')}</summary>
-          <div style={{ ...STACK, marginTop: 8 }}>
-            <p style={NOTE}>{t('thresholds.hint')}</p>
-            {THRESHOLDS.map((field) => textInput(field, t(`thresholds.${field}`), null, 'decimal'))}
-          </div>
-        </details>
+        <ThresholdEditor
+          t={t}
+          values={settings}
+          parsedValues={parsedThresholds}
+          savedValues={savedThresholds}
+          onChange={setField}
+          showErrors={showMissing}
+        />
       )}
 
       <div style={ACTION_BAR}>
-        <button type="button" onClick={save} disabled={saving} style={buttonStyle(saving, PRIMARY_BUTTON)}>
+        <Button onClick={save} disabled={saving}>
           {t(saving ? 'saving' : 'save')}
-        </button>
+        </Button>
         {showMissing && !validation.valid ? (
           <span role="alert" style={ERROR_NOTE}>
             {t('save.invalid')}
           </span>
-        ) : saved && !dirty ? (
+        ) : null}
+        {showMissing && invalidFieldNames.length > 0 ? (
+          <span role="alert" style={ERROR_NOTE}>
+            <button type="button" className="decision-review-field-error-link" onClick={focusInvalidSetting}>
+              {t('save.fieldsInvalid', { fields: invalidFieldNames.join(', ') })}
+            </button>
+          </span>
+        ) : saved && !dirty && validation.valid ? (
           <span role="status" style={{ ...NOTE, color: 'var(--dsw-alias-state-success-primary, #21783e)' }}>
             {t('saved')}
           </span>
@@ -405,13 +450,38 @@ function RequestError({ t, error }: { t: Translate; error: ApiError }) {
   )
 }
 
+function draftSettings({ timeoutMs, ...fields }: Omit<PublicSettings, 'rules'>): DraftSettings {
+  return { ...fields, timeoutSeconds: formatTimeoutSeconds(timeoutMs) }
+}
+
 function formSnapshot(fields: DraftSettings, rules: DraftRule[], apiKeyInput: string, clearKey: boolean) {
   return JSON.stringify([fields, ruleData(rules), apiKeyInput, clearKey])
 }
 
-function savedForm(fields: DraftSettings, rules: DraftRule[]) {
+function parseThresholds(draft: Record<Threshold, number | string>): Record<Threshold, number | null> {
+  const parse = (value: number | string) => {
+    const score = numericValue(value)
+    return Number.isFinite(score) && score >= 0 && score <= 1 ? score : null
+  }
+  return {
+    tConf: parse(draft.tConf),
+    tHighPred: parse(draft.tHighPred),
+    tMedPred: parse(draft.tMedPred),
+    tStrongPred: parse(draft.tStrongPred),
+    tAuth: parse(draft.tAuth),
+  }
+}
+
+function savedForm(fields: DraftSettings, rules: DraftRule[], thresholds: Record<Threshold, number>) {
   return {
     snapshot: formSnapshot(fields, rules, '', false),
+    thresholds: {
+      tConf: thresholds.tConf,
+      tHighPred: thresholds.tHighPred,
+      tMedPred: thresholds.tMedPred,
+      tStrongPred: thresholds.tStrongPred,
+      tAuth: thresholds.tAuth,
+    },
     // The host exposes an invalid stored endpoint or model as an empty field.
     needsDecisionsRepair: fields.endpoint === '' || fields.model === '',
   }
