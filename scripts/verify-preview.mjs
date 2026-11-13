@@ -109,6 +109,16 @@ async function thresholdState(name) {
       flags: [...row.querySelectorAll('[data-flag]')].map(flag => flag.textContent.trim()) };
   })()`)
 }
+async function exactThreshold(name, score) {
+  const row = await threshold(name)
+  const input = row + ' input.decision-review-threshold-value'
+  await view.scrollTo(input)
+  await view.click(input)
+  await view.evaluate(`document.querySelector('${input}').select()`)
+  if (score) await view.type(score)
+  else await view.press('Backspace')
+  assert.equal(await view.evaluate(`document.querySelector('${input}').value`), score)
+}
 async function pressThreshold(name, key) {
   const row = await threshold(name)
   await view.evaluate(`document.querySelector('${row} input[type=range]').focus()`)
@@ -503,6 +513,67 @@ try {
     sameFlag,
   })
   passed('Successful save and HTTP reload persist normalized values')
+  await exactThreshold('tConf', '0.756')
+  await click('Save')
+  await until(textIncludes('Settings saved.'))
+  assert.deepEqual((await thresholdState('tConf')).flags, ['Default 0.75', 'Saved 0.756'])
+  await pressThreshold('tConf', 'ArrowRight')
+  assert.equal((await thresholdState('tConf')).value, 0.77)
+  await pressThreshold('tConf', 'ArrowLeft')
+  assert.equal((await thresholdState('tConf')).value, 0.76)
+  assert.deepEqual((await thresholdState('tConf')).flags, ['Default 0.75', 'Saved 0.756'])
+
+  await fill('Request timeout (seconds)', '4.999')
+  await exactThreshold('tConf', '')
+  const requestsBeforeFieldError = requests.filter(({ url }) => url.endsWith('/decision-review/save')).length
+  await click('Save')
+  const alertNearSave = await view.evaluate(`(() => {
+    const save = [...document.querySelectorAll('.decision-review-panel button')].find(node => node.textContent === 'Save');
+    const notice = save.parentElement.querySelector('[role=alert]');
+    const bounds = notice.getBoundingClientRect();
+    const frame = document.querySelector('.preview-window').getBoundingClientRect();
+    const hit = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    return { text: notice.textContent, visible: bounds.top >= frame.top && bounds.bottom <= frame.bottom && notice.contains(hit) };
+  })()`)
+  assert.equal(alertNearSave.visible, true)
+  assert.match(alertNearSave.text, /Request timeout \(seconds\), tConf/)
+  assert.equal(requests.filter(({ url }) => url.endsWith('/decision-review/save')).length, requestsBeforeFieldError)
+  const errorJump = '.decision-review-field-error-link'
+  await capture('en-dark-visible-save-validation')
+  await view.click(errorJump)
+  const timeoutFocused = await view.evaluate(`(() => {
+    const input = document.activeElement;
+    const rect = input.getBoundingClientRect();
+    return input.matches('input.decision-review-timeout[aria-invalid=true]') &&
+      input.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+  })()`)
+  assert.equal(timeoutFocused, true)
+  const invalidExact = await threshold('tConf')
+  assert.equal(
+    await view.evaluate(
+      `document.querySelector('${invalidExact} input.decision-review-threshold-value').getAttribute('aria-invalid')`,
+    ),
+    'true',
+  )
+  await choose('界面语言', 'zh')
+  assert.match(await body(), /保存前请修正这些设置：请求超时（秒）, tConf/)
+  await choose('界面语言', 'en')
+  await fill('Request timeout (seconds)', '60')
+  await exactThreshold('tConf', '0.756')
+  await exactThreshold('tAuth', '0.70000123456789')
+  await click('Save')
+  await until(textIncludes('Settings saved.'))
+  await click('重新加载已保存配置')
+  await openThresholds()
+  assert.equal((await thresholdState('tConf')).value, 0.756)
+  assert.equal((await thresholdState('tAuth')).value, 0.70000123456789)
+  assert.deepEqual((await thresholdState('tConf')).flags, ['Default 0.75', 'Saved 0.756'])
+  await view.scrollTo(await threshold('tConf'))
+  await capture('en-dark-exact-threshold')
+  passed(
+    'Exact thresholds restore off-grid values; invalid settings block requests and remain visible beside Save',
+    alertNearSave,
+  )
   await scene('session')
   assert.equal(await view.evaluate(`!!document.querySelector('${thresholds}')`), false)
   assert.equal(await checkedRadio('Review engine'), 'Follow session (use the session model)')

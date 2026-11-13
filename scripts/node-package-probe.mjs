@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Script } from 'node:vm'
+import { assertScopedStylesheet } from './check-stylesheet.mjs'
 import {
   jsonRequest,
   makeAnswers,
@@ -122,7 +123,7 @@ async function verifyClient() {
   assert.equal(styles.length, 1)
   assert.match(styles[0].textContent, /\.decision-review-panel/)
   assert.match(styles[0].textContent, /\.dr\\:/)
-  assert.doesNotMatch(styles[0].textContent, /:root|:host|@property|--tw-/)
+  assertScopedStylesheet(styles[0].textContent)
   assert.equal(localeRegistered, true)
   assert.deepEqual(slots, ['plugins.row.config', 'conversation.composer.dock'])
   dispose()

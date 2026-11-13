@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sourceManifest from '../package.json' with { type: 'json' }
+import { assertScopedStylesheet } from './check-stylesheet.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const staging = await mkdtemp(join(tmpdir(), 'decision-review-build-'))
@@ -80,9 +81,9 @@ try {
   const serverText = await bundle('server')
   const clientText = await bundle('client')
   const controlCss = await readFile(join(root, 'src/client/ui/control-styles.generated.css'), 'utf8')
-  if (!controlCss.includes('.dr\\:') || /:root|:host|@property|--tw-/.test(controlCss)) {
-    throw new Error('Expected prefixed controls CSS without global Tailwind theme, reset, or properties')
-  }
+  if (!controlCss.includes('.dr\\:')) throw new Error('Missing prefixed controls CSS')
+  assertScopedStylesheet(controlCss)
+  assertScopedStylesheet(await readFile(join(root, 'src/client/styles.css'), 'utf8'))
   // DSH serves a classic script and supplies require inside this factory.
   const registeredClient = `window.__ModuleLoader__.load({
   id: ${JSON.stringify(manifest.name)},

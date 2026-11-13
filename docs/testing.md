@@ -99,7 +99,7 @@ CI 不安装或启动真实 DSH，也不声称完成宿主验收。该入口的�
 
 ## Preview boundaries
 
-`bun run test` and `bun run test:ci` also include `preview/service.test.ts` and `preview/verifier.test.js` in the same isolated Bun invocation. The service checks exercise the real settings normalizer through synthetic HTTP requests: write-only keys, strict validation, per-session isolation, invalid-config repair, multiline round trips, fault recovery, test-list validation, cancellation and the deterministic composer. The existing preload still rejects unexpected provider fetches. `bun run test:preview` runs just these source-only checks.
+`bun run test` and `bun run test:ci` also include `preview/service.test.ts`, `preview/verifier.test.js` and `preview/scoped-css.test.js` in the same isolated Bun invocation. The service checks exercise the real settings normalizer through synthetic HTTP requests: write-only keys, strict validation, per-session isolation, invalid-config repair, multiline round trips, fault recovery, test-list validation, cancellation and the deterministic composer. The CSS checks accept scoped selector lists and nested modifiers while rejecting rules that escape the plugin scope. The existing preload still rejects unexpected provider fetches. `bun run test:preview` runs just these source-only checks.
 
 The installed-byte suite remains `test/` only: its production tests load the packed `dist/`, including the new shared-client lifecycle checks. Preview sources are deliberately absent from that harness and the consumer. The Node probe now also checks the injected stylesheet's registration and disposal. Build metadata rejects preview sources and bundled React/React DOM in production client output.
 

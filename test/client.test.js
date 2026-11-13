@@ -504,6 +504,50 @@ describe('configuration panel', () => {
     expect(thresholdFlags('tConf')).toEqual(['Default 0.75', 'Saved 0.7525'])
   })
 
+  test.serial('restores an off-grid threshold with the exact editor after moving its slider', async () => {
+    serverSettings.tConf = 0.756
+    await render()
+    await pressThreshold('tConf', 'ArrowRight')
+    await pressThreshold('tConf', 'ArrowLeft')
+    expect(threshold('tConf').getAttribute('aria-valuenow')).toBe('0.76')
+    const input = client.container.querySelector('input[aria-label="tConf, exact value"]')
+    expect(input).not.toBeNull()
+    await client.change(input, '0.756')
+    expect(threshold('tConf').getAttribute('aria-valuenow')).toBe('0.756')
+    await click('save')
+    expect(saveRequests()[0].body.settings.tConf).toBe(0.756)
+    expect(thresholdFlags('tConf')).toEqual(['Default 0.75', 'Saved 0.756'])
+  })
+
+  test.serial('announces invalid timeout beside Save without a request', async () => {
+    await render()
+    await change('timeout.label', '4.999')
+    await click('save')
+    expect(saveRequests()).toHaveLength(0)
+    const notice = button('save').parentElement.querySelector('[role="alert"]')
+    expect(notice?.textContent).toContain('Request timeout (seconds)')
+    await act(async () => notice.querySelector('button').click())
+    expect(client.window.document.activeElement).toBe(field('timeout.label'))
+    client.language = 'zh'
+    await render()
+    expect(notice.textContent).toContain('请求超时（秒）')
+  })
+
+  test.serial('can open a collapsed threshold and focus its invalid exact input from Save', async () => {
+    await render()
+    const input = client.container.querySelector('input[aria-label="tConf, exact value"]')
+    await client.change(input, '1.01')
+    const details = input.closest('details')
+    expect(details.open).toBe(false)
+    await click('save')
+    expect(saveRequests()).toHaveLength(0)
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+    const notice = button('save').parentElement.querySelector('[role="alert"] button')
+    await act(async () => notice.click())
+    expect(details.open).toBe(true)
+    expect(client.window.document.activeElement).toBe(input)
+  })
+
   test.serial('threshold flags keep the saved value on failure and track the response during newer edits', async () => {
     await render()
     expect(thresholdFlags('tConf')).toEqual(['Default / Saved 0.75'])

@@ -2,16 +2,19 @@
 import * as React from 'react'
 import { THRESHOLDS, THRESHOLD_DEFAULTS, type Threshold } from '../shared/contracts.js'
 import type { Translate } from './messages.js'
+import { Input } from './ui/input.js'
 import { Slider } from './ui/slider.js'
 
 interface ThresholdEditorProps {
   t: Translate
-  values: Record<Threshold, number>
+  values: Record<Threshold, number | string>
+  parsedValues: Record<Threshold, number | null>
   savedValues: Record<Threshold, number>
-  onChange: (field: Threshold, value: number) => void
+  onChange: (field: Threshold, value: number | string) => void
+  showErrors: boolean
 }
 
-export function ThresholdEditor({ t, values, savedValues, onChange }: ThresholdEditorProps) {
+export function ThresholdEditor({ t, values, parsedValues, savedValues, onChange, showErrors }: ThresholdEditorProps) {
   const hintId = React.useId()
   return (
     <details className="decision-review-thresholds">
@@ -26,6 +29,8 @@ export function ThresholdEditor({ t, values, savedValues, onChange }: ThresholdE
             t={t}
             field={field}
             value={values[field]}
+            score={parsedValues[field] ?? savedValues[field]}
+            invalid={showErrors && parsedValues[field] === null}
             defaultValue={THRESHOLD_DEFAULTS[field]}
             savedValue={savedValues[field]}
             hintId={hintId}
@@ -41,6 +46,8 @@ function ThresholdField({
   t,
   field,
   value,
+  score,
+  invalid,
   defaultValue,
   savedValue,
   hintId,
@@ -48,25 +55,40 @@ function ThresholdField({
 }: {
   t: Translate
   field: Threshold
-  value: number
+  value: number | string
+  score: number
+  invalid: boolean
   defaultValue: number
   savedValue: number
   hintId: string
-  onChange: (value: number) => void
+  onChange: (value: number | string) => void
 }) {
   const id = React.useId()
   const defaultId = id + '-default'
   const savedId = id + '-saved'
+  const errorId = id + '-error'
   const same = defaultValue === savedValue
 
   return (
     <div className="decision-review-threshold">
       <div className="decision-review-threshold-title">
         <span id={id}>{t(`thresholds.${field}`)}</span>
-        <span className="decision-review-threshold-value" aria-hidden="true" title={String(value)}>
-          {value}
-        </span>
+        <Input
+          type="text"
+          inputMode="decimal"
+          className="decision-review-threshold-value"
+          aria-label={t('thresholds.exact', { field })}
+          aria-describedby={invalid ? errorId : undefined}
+          aria-invalid={invalid || undefined}
+          value={value}
+          onChange={(event) => onChange(event.currentTarget.value)}
+        />
       </div>
+      {invalid && (
+        <p id={errorId} className="decision-review-field-error">
+          {t('thresholds.invalid')}
+        </p>
+      )}
       <div className="decision-review-threshold-rail">
         <ThresholdFlag
           id={defaultId}
@@ -79,7 +101,7 @@ function ThresholdField({
           max={1}
           step={0.01}
           largeStep={0.1}
-          value={value}
+          value={score}
           aria-labelledby={id}
           aria-describedby={`${hintId} ${defaultId}${same ? '' : ' ' + savedId}`}
           getAriaValueText={(_formatted, score) => String(score)}

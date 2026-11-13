@@ -120,4 +120,4 @@ dsh plugin --profile YOUR_PROFILE add ./artifacts/local-decision-review-0.1.0.tg
 
 配置面板和规则编辑器使用 [shadcn/ui Base UI 的接入方案](ui-style-evaluation.md#当前接入决策)。`build` 与 `dev` 都用冻结的 Tailwind CLI 从 `src/client/ui/control-styles.css` 编译同一个忽略提交的 `control-styles.generated.css`；开发服务另起一个随服务退出的 CSS watcher。Tailwind 扫描只包含同目录控件 TSX；布局和宿主颜色变量仍由插件作用域 CSS 管理。
 
-升级 registry 组件时，先在临时目录取出固定上游源码，再逐个合并所需改动；`components.json` 记录 Base Nova、前缀及本地路径。保留 React 18 的引用转发、表单语义和本地 Portal。新增工具类前检查生成文件，禁止 Preflight、全局主题选择器和未加前缀的内部变量。与浏览器 bundle 一同分发的第三方许可记录在 `assets/LICENSE.client`。
+升级 registry 组件时，先在临时目录取出固定上游源码，再逐个合并所需改动；`components.json` 记录 Base Nova、前缀及本地路径。保留 React 18 的引用转发、表单语义和本地 Portal。构建和隔离 Node 探针检查最终 CSS 的每个选择器：选择器列表中的每一项必须从 `dr:` 工具类或 `decision-review-` 类开始。只允许项目当前使用的分组规则和有父级作用域的嵌套修饰，拒绝全局选择器、越出插件范围的同级选择器、Preflight 和未加前缀的内部变量。与浏览器 bundle 一同分发的第三方许可记录在 `assets/LICENSE.client`。

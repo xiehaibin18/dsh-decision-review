@@ -13,6 +13,7 @@ import {
   type SettingsIssue,
   type Threshold,
 } from '../shared/contracts.js'
+import { numericValue } from '../shared/decimal-number.js'
 import { errorCode, isRecord } from './json.js'
 
 export const SETTINGS_FILE = 'decision-review.settings.json'
@@ -107,19 +108,6 @@ function normalizeDecisionsRoute(
   if (strict) throw new SettingsValidationError(issue, `decision-review: ${field} must be ${requirement}`)
   reportStoredProblem(problems, issue, `stored ${field} must be ${requirement}; enter a valid value to resume review`)
   return ''
-}
-
-const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i
-
-/** The number a stored or submitted value stands for: a finite number or a
- * plain decimal string (what the settings form sends). Anything else is NaN,
- * so the coercions of `Number()` never decide a setting: `false` and `[]`
- * would become 0, `true` would become 1, and a hostile object can make it
- * throw. */
-function numericValue(value: unknown): number {
-  if (typeof value === 'number') return value
-  if (typeof value === 'string' && DECIMAL_NUMBER.test(value.trim())) return Number(value)
-  return Number.NaN
 }
 
 /** Validate one numeric threshold into [0,1]. Strict mode (user saves) throws;

@@ -257,6 +257,22 @@
   font-size: 12px;
 }
 
+.decision-review-field-error-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.decision-review-field-error-link:focus-visible {
+  outline: 2px solid var(--decision-review-focus);
+  outline-offset: 2px;
+}
+
 .decision-review-timeout {
   max-width: 8rem;
 }
@@ -353,12 +369,9 @@
 
 .decision-review-threshold-value {
   flex: none;
-  max-width: 45%;
-  overflow: hidden;
-  color: var(--decision-review-muted);
+  width: 6.5em;
+  max-width: 40%;
   text-align: end;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .decision-review-threshold-rail {

@@ -2,13 +2,16 @@
 import * as React from 'react'
 import {
   RULE_MAX_COUNT,
+  THRESHOLDS,
   type ConfigResponse,
   type DenialRoute,
   type PublicSettings,
   type ReviewEngine,
   type SettingsUpdate,
   type TestResult,
+  type Threshold,
 } from '../shared/contracts.js'
+import { numericValue } from '../shared/decimal-number.js'
 import { reportError, type ApiError, type ReviewApi } from './api.js'
 import { ChoiceField } from './choice-field.js'
 import { SettingField, TechnicalDetails } from './components.js'
@@ -23,7 +26,8 @@ import { Button } from './ui/button.js'
 import { Input } from './ui/input.js'
 
 type TextField = 'endpoint' | 'model'
-type DraftSettings = Omit<PublicSettings, 'rules' | 'timeoutMs'> & { timeoutSeconds: string }
+type DraftSettings = Omit<PublicSettings, 'rules' | 'timeoutMs' | Threshold> &
+  Record<Threshold, number | string> & { timeoutSeconds: string }
 
 interface ConfigPanelProps {
   t: Translate
@@ -87,7 +91,7 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
   // The form holds a typed replacement key or a request to remove the stored key.
   const [apiKeyInput, setApiKeyInput] = React.useState('')
   const [clearKey, setClearKey] = React.useState(false)
-  const [baseline, setBaseline] = React.useState(() => savedForm(settings, rules))
+  const [baseline, setBaseline] = React.useState(() => savedForm(settings, rules, initialFields))
   const nextRuleId = React.useRef(rules.length + 1)
   const lastAddedId = React.useRef<number | null>(null)
   // A save response must not overwrite edits made while it was in flight.
@@ -118,7 +122,10 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
   const showDecisionsFields = isDecisions || repairingDecisions
   const dirty = formSnapshot(settings, rules, apiKeyInput, clearKey) !== baseline.snapshot
   const validation = validateRules(rules)
+  const parsedThresholds = parseThresholds(settings)
+  const invalidThresholds = isDecisions ? THRESHOLDS.filter((field) => parsedThresholds[field] === null) : []
   const timeoutMs = parseTimeoutSeconds(settings.timeoutSeconds)
+  const invalidFieldNames = [...(timeoutMs === null ? [t('timeout.label')] : []), ...invalidThresholds]
   const timeoutError = showMissing && timeoutMs === null ? t('issue.timeout', TIMEOUT_SECONDS_RANGE) : null
   const keyStatus = clearKey ? t('apikey.clear.pending') : settings.hasApiKey ? t('apikey.saved') : ''
   const { runtime } = initialConfig
@@ -162,15 +169,36 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
     setRules((prev) => prev.filter((rule) => rule.id !== id))
   }
 
+  function focusInvalidSetting(event: React.MouseEvent<HTMLButtonElement>) {
+    const panel = event.currentTarget.closest('.decision-review-panel')
+    const input = panel?.querySelector<HTMLInputElement>(
+      'input.decision-review-timeout[aria-invalid=true], input.decision-review-threshold-value[aria-invalid=true]',
+    )
+    const details = input?.closest('details')
+    if (details) details.open = true
+    input?.focus()
+  }
+
   async function save() {
     if (saveRequest.current) return
-    if (!validation.valid || timeoutMs === null) {
+    if (!validation.valid || timeoutMs === null || invalidThresholds.length) {
       setShowMissing(true)
       return
     }
     const startVersion = editVersion.current
     const { hasApiKey, timeoutSeconds, ...fields } = settings
-    const update: SettingsUpdate = { ...fields, timeoutMs, rules: ruleData(validation.rules) }
+    const { tConf, tHighPred, tMedPred, tStrongPred, tAuth } = parsedThresholds
+    const update: SettingsUpdate = {
+      ...fields,
+      // When following the session, a hidden invalid draft must not replace the last saved value.
+      tConf: tConf ?? savedThresholds.tConf,
+      tHighPred: tHighPred ?? savedThresholds.tHighPred,
+      tMedPred: tMedPred ?? savedThresholds.tMedPred,
+      tStrongPred: tStrongPred ?? savedThresholds.tStrongPred,
+      tAuth: tAuth ?? savedThresholds.tAuth,
+      timeoutMs,
+      rules: ruleData(validation.rules),
+    }
     if (apiKeyInput !== '') update.apiKey = apiKeyInput
     if (clearKey) update.clearApiKey = true
     const controller = new AbortController()
@@ -186,7 +214,7 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
       const { rules: persistedRules, ...persistedFields } = payload.settings
       const savedFields = draftSettings(persistedFields)
       const savedRules = draftRules(persistedRules, nextRuleId, rules)
-      setBaseline(savedForm(savedFields, savedRules))
+      setBaseline(savedForm(savedFields, savedRules, persistedFields))
       if (editVersion.current === startVersion) {
         setSettings(savedFields)
         setRules(savedRules)
@@ -357,7 +385,16 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
         onChange={changeRule}
         onRemove={removeRule}
       />
-      {isDecisions && <ThresholdEditor t={t} values={settings} savedValues={savedThresholds} onChange={setField} />}
+      {isDecisions && (
+        <ThresholdEditor
+          t={t}
+          values={settings}
+          parsedValues={parsedThresholds}
+          savedValues={savedThresholds}
+          onChange={setField}
+          showErrors={showMissing}
+        />
+      )}
 
       <div style={ACTION_BAR}>
         <Button onClick={save} disabled={saving}>
@@ -367,7 +404,14 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
           <span role="alert" style={ERROR_NOTE}>
             {t('save.invalid')}
           </span>
-        ) : saved && !dirty ? (
+        ) : null}
+        {showMissing && invalidFieldNames.length > 0 ? (
+          <span role="alert" style={ERROR_NOTE}>
+            <button type="button" className="decision-review-field-error-link" onClick={focusInvalidSetting}>
+              {t('save.fieldsInvalid', { fields: invalidFieldNames.join(', ') })}
+            </button>
+          </span>
+        ) : saved && !dirty && validation.valid ? (
           <span role="status" style={{ ...NOTE, color: 'var(--dsw-alias-state-success-primary, #21783e)' }}>
             {t('saved')}
           </span>
@@ -414,15 +458,29 @@ function formSnapshot(fields: DraftSettings, rules: DraftRule[], apiKeyInput: st
   return JSON.stringify([fields, ruleData(rules), apiKeyInput, clearKey])
 }
 
-function savedForm(fields: DraftSettings, rules: DraftRule[]) {
+function parseThresholds(draft: Record<Threshold, number | string>): Record<Threshold, number | null> {
+  const parse = (value: number | string) => {
+    const score = numericValue(value)
+    return Number.isFinite(score) && score >= 0 && score <= 1 ? score : null
+  }
+  return {
+    tConf: parse(draft.tConf),
+    tHighPred: parse(draft.tHighPred),
+    tMedPred: parse(draft.tMedPred),
+    tStrongPred: parse(draft.tStrongPred),
+    tAuth: parse(draft.tAuth),
+  }
+}
+
+function savedForm(fields: DraftSettings, rules: DraftRule[], thresholds: Record<Threshold, number>) {
   return {
     snapshot: formSnapshot(fields, rules, '', false),
     thresholds: {
-      tConf: fields.tConf,
-      tHighPred: fields.tHighPred,
-      tMedPred: fields.tMedPred,
-      tStrongPred: fields.tStrongPred,
-      tAuth: fields.tAuth,
+      tConf: thresholds.tConf,
+      tHighPred: thresholds.tHighPred,
+      tMedPred: thresholds.tMedPred,
+      tStrongPred: thresholds.tStrongPred,
+      tAuth: thresholds.tAuth,
     },
     // The host exposes an invalid stored endpoint or model as an empty field.
     needsDecisionsRepair: fields.endpoint === '' || fields.model === '',

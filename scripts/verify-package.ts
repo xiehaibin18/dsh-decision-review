@@ -185,10 +185,9 @@ async function verifyProductionInstall(form: 'directory' | 'tarball', spec: stri
   await mkdir(join(consumer, 'test'))
   await mkdir(join(consumer, 'scripts'))
   await copyFile(join(snapshot, 'test', 'fixtures.js'), join(consumer, 'test', 'fixtures.js'))
-  await copyFile(
-    join(snapshot, 'scripts', 'node-package-probe.mjs'),
-    join(consumer, 'scripts', 'node-package-probe.mjs'),
-  )
+  for (const script of ['node-package-probe.mjs', 'check-stylesheet.mjs']) {
+    await copyFile(join(snapshot, 'scripts', script), join(consumer, 'scripts', script))
+  }
   const node = execFileSync('node', ['-p', 'process.execPath'], {
     cwd: consumer,
     env: { ...env, PATH: process.env.PATH },
