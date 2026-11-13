@@ -1,0 +1,185 @@
+{
+  "date": "2026-11-12",
+  "baseCommit": "14599eabfee782292423e4b1ee5128d0a77703e5",
+  "bunRevision": "963452075e9d7e2a47a482f297143af5ed4f76c0",
+  "engineeringCheck": {
+    "command": "bun run check",
+    "status": "passed",
+    "testCount": 267
+  },
+  "browserCheck": {
+    "command": "bun run verify:preview -- <local preview URL>",
+    "status": "passed",
+    "checks": [
+      {
+        "name": "Scaled pointer resize, numeric size, host breakpoints and normal-window clamps",
+        "details": {
+          "desktop": {
+            "width": 1280,
+            "height": 820,
+            "visualWidth": 1124.671875,
+            "visualHeight": 720.5,
+            "sidebar": 280,
+            "inset": "48px"
+          },
+          "half": {
+            "width": 1280,
+            "height": 820,
+            "visualWidth": 640,
+            "visualHeight": 410,
+            "sidebar": 280,
+            "inset": "48px"
+          },
+          "minimum": {
+            "width": 520,
+            "height": 600,
+            "visualWidth": 260,
+            "visualHeight": 300,
+            "sidebar": 0,
+            "inset": "20px"
+          }
+        }
+      },
+      {
+        "name": "Chinese/light/wide Decisions and three synthetic smoke results",
+        "details": {
+          "width": 1280,
+          "height": 913,
+          "scrollWidth": 1280,
+          "scrollHeight": 913,
+          "canvas": {
+            "width": 1280,
+            "height": 820,
+            "visualWidth": 1124.671875,
+            "visualHeight": 720.5,
+            "sidebar": 280,
+            "inset": "48px"
+          }
+        }
+      },
+      {
+        "name": "Slot/language/theme/size preserve draft; 390px browser viewport still uses logical host width",
+        "details": {
+          "width": 390,
+          "height": 844,
+          "scrollWidth": 390,
+          "scrollHeight": 844,
+          "canvas": {
+            "width": 520,
+            "height": 600,
+            "visualWidth": 370,
+            "visualHeight": 426.921875,
+            "sidebar": 0,
+            "inset": "20px"
+          }
+        }
+      },
+      {
+        "name": "Successful save and HTTP reload persist normalized values"
+      },
+      {
+        "name": "English/light/narrow Follow session",
+        "details": {
+          "width": 390,
+          "height": 844,
+          "scrollWidth": 390,
+          "scrollHeight": 844,
+          "canvas": {
+            "width": 520,
+            "height": 600,
+            "visualWidth": 370,
+            "visualHeight": 426.921875,
+            "sidebar": 0,
+            "inset": "20px"
+          }
+        }
+      },
+      {
+        "name": "Config HTTP 503 recovers by restoring endpoint and reloading"
+      },
+      {
+        "name": "Save HTTP 503 preserves draft; recovery and retry succeed"
+      },
+      {
+        "name": "Multiline text survives save/reload byte-for-byte; blank rule blocks save",
+        "details": {
+          "multiline": "  第一行\n\n  npm test -- --runInBand\nlast line | 保留空格  \n"
+        }
+      },
+      {
+        "name": "Keyboard select, focus ring, linked errors, add/remove focus and bilingual narrow rules",
+        "details": {
+          "semantics": {
+            "label": "匹配条件  第一行\n\n  npm test -- --runInBand\nlast line | 保留空格  \n",
+            "required": "true",
+            "descriptions": [
+              "52/400 个字符"
+            ]
+          },
+          "invalid": {
+            "invalid": "true",
+            "descriptions": [
+              "请输入匹配条件。",
+              "0/400 个字符"
+            ]
+          }
+        }
+      },
+      {
+        "name": "Invalid stored route/model require real validation and repair while keeping session engine"
+      },
+      {
+        "name": "Switch during delayed load cancels old scene without stale form"
+      },
+      {
+        "name": "Saving state is visible; model and multiline rule edits made during save are not overwritten",
+        "details": {
+          "savingAfterEdits": true,
+          "responsePendingAfterEdits": true,
+          "responseStatus": 200
+        }
+      },
+      {
+        "name": "Switch during delayed smoke cancels old results"
+      },
+      {
+        "name": "Test request error recovers; mixed synthetic row error renders"
+      },
+      {
+        "name": "Stats failure recovers on polling; zero-review fixture hides pill"
+      },
+      {
+        "name": "All network requests remain localhost; no uncaught runtime exceptions"
+      }
+    ],
+    "uncaughtErrors": [],
+    "failures": []
+  },
+  "counterexample": {
+    "mutation": "Force the sidebar to remain visible at the 520px minimum window",
+    "status": "failed",
+    "failureCount": 1,
+    "restored": true
+  },
+  "inAppBrowser": {
+    "status": "passed",
+    "checks": [
+      "Only the selected slot is visible and interactive",
+      "Dark Reader does not override the preview theme",
+      "Draft survives slot, language, theme and size changes",
+      "Pointer resize at 50% maps 100px by 60px to 200px by 120px logical size",
+      "Pointer and numeric resizing clamp to 520 by 600",
+      "Sidebar collapses at 1023 and returns at 1024 logical pixels",
+      "Minimum window scrolls through rules and save actions"
+    ],
+    "screenshots": [
+      "config-desktop-dark.png",
+      "dock-minimum-dark.png"
+    ]
+  },
+  "notRun": [
+    "HMR source-edit verification for this change",
+    "Real DSH profile or model calls",
+    "Pixel-level rc.2 visual acceptance"
+  ]
+}

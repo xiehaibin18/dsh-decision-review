@@ -27,7 +27,6 @@ export const SCENES = [
 export type SceneId = (typeof SCENES)[number]['id']
 export type PreviewLanguage = 'zh' | 'en'
 export type PreviewTheme = 'light' | 'dark'
-export type PreviewWidth = 'wide' | 'narrow'
 
 export function isSceneId(value: unknown): value is SceneId {
   return SCENES.some((scene) => scene.id === value)

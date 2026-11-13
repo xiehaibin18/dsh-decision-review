@@ -7,6 +7,9 @@ if (target.protocol !== 'http:' || !['localhost', '127.0.0.1'].includes(target.h
   throw new Error('Browser acceptance requires a localhost HTTP preview URL')
 const origin = target.origin
 const checkHmr = process.argv.includes('--hmr')
+const configSlot = 'plugins.row.config'
+const statsSlot = 'conversation.composer.dock'
+const statsPill = 'document.querySelector(".preview-stats-dock > span[title]")'
 const failures = []
 const evidenceDirectory = 'artifacts/browser'
 const events = []
@@ -81,18 +84,62 @@ async function scene(id, wait = true) {
   await choose('预览场景', id)
   if (wait) await until(`!!document.querySelector('.decision-review-panel')`)
 }
+const statsRequests = () => requests.filter(({ url }) => url.includes('/decision-review/stats'))
+async function expectStatsResponse(after, status) {
+  const deadline = Date.now() + 8000
+  do {
+    if (
+      statsRequests()
+        .slice(after)
+        .some((request) => request.status === status)
+    )
+      return
+    await Bun.sleep(60)
+  } while (Date.now() < deadline)
+  throw new Error(`Did not receive stats response HTTP ${status}`)
+}
+const canvas = () =>
+  view.evaluate(`(() => {
+    const frame = document.querySelector('.preview-window');
+    const {width: visualWidth, height: visualHeight} = frame.getBoundingClientRect();
+    return {
+      width: frame.offsetWidth, height: frame.offsetHeight, visualWidth, visualHeight,
+      sidebar: document.querySelector('.preview-sidebar').offsetWidth,
+      inset: getComputedStyle(document.querySelector('.preview-plugin-page')).paddingLeft,
+    };
+  })()`)
+async function dragResize(dx, dy) {
+  const start = await view.evaluate(`(() => {
+    const grip = document.querySelector('.preview-resize').getBoundingClientRect();
+    return {x: grip.x + grip.width / 2, y: grip.y + grip.height / 2};
+  })()`)
+  const end = { x: start.x + dx, y: start.y + dy }
+  await view.cdp('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...start })
+  await view.cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', button: 'left', buttons: 1, ...end })
+  await view.cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...end })
+}
+async function enterDimension(label, value) {
+  await view.evaluate(`(() => {
+    const control = document.querySelector('input[aria-label="${label}"]');
+    control.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(control, '${value}');
+    control.dispatchEvent(new Event('input', {bubbles:true}));
+  })()`)
+  await view.press('Enter')
+}
 async function capture(name) {
   const metrics = await view.evaluate(
-    '({ width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth, surfaceWidth: document.querySelector(".preview-surface").getBoundingClientRect().width })',
+    '({ width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth, scrollHeight: document.documentElement.scrollHeight })',
   )
-  assert.equal(metrics.scrollWidth, metrics.width, `Horizontal overflow in ${name}`)
+  assert.equal(metrics.scrollWidth, metrics.width, `Page horizontal overflow in ${name}`)
+  assert.equal(metrics.scrollHeight, metrics.height, `Page vertical overflow in ${name}`)
   const screenshot = await view.cdp('Page.captureScreenshot', {
     format: 'png',
     captureBeyondViewport: true,
     fromSurface: true,
   })
   await Bun.write(`${evidenceDirectory}/${name}.png`, Buffer.from(screenshot.data, 'base64'))
-  return metrics
+  return { ...metrics, canvas: await canvas() }
 }
 function passed(name, details) {
   checks.push({ name, details })
@@ -113,21 +160,87 @@ try {
   view.addEventListener('Runtime.exceptionThrown', (event) => errors.push(event.data))
   view.onNavigated = () => navigations++
   await view.navigate(origin)
-  await until(textIncludes('自动评审 12 次'))
-  assert.match(await body(), /决策评审/)
-  assert.match(await view.evaluate('document.querySelector(".preview-dock [title]").title'), /阻止 1 · 评审失败 1/)
+  await until(`!!document.querySelector('.decision-review-panel')`)
+  assert.equal(await view.evaluate('document.querySelector(".decision-review-panel h2").textContent'), '决策评审')
+  const desktop = await canvas()
+  assert.equal(desktop.width, 1280)
+  assert.equal(desktop.height, 820)
+  assert.equal(desktop.sidebar, 280)
+  assert.equal(statsRequests().length, 0, 'Config slot must not mount the statistics poller')
+  await capture('zh-light-desktop-config')
+  await choose('缩放', '0.5')
+  const half = await canvas()
+  assert.equal(half.visualWidth, 640)
+  assert.equal(half.sidebar, 280, 'Visual zoom must not change the logical sidebar breakpoint')
+  await dragResize(-80, -30)
+  assert.equal((await canvas()).width, 1120)
+  assert.equal((await canvas()).height, 760)
+  await dragResize(-400, -240)
+  const minimum = await canvas()
+  assert.equal(minimum.width, 520)
+  assert.equal(minimum.height, 600)
+  assert.equal(minimum.sidebar, 0)
+  assert.equal(minimum.inset, '20px')
+  await enterDimension('宽度', 1023)
+  assert.equal((await canvas()).width, 1023)
+  assert.equal((await canvas()).sidebar, 0)
+  await enterDimension('宽度', 1024)
+  assert.equal((await canvas()).width, 1024)
+  assert.equal((await canvas()).sidebar, 280)
+  await enterDimension('高度', 400)
+  assert.equal((await canvas()).height, 600)
+  await choose('缩放', 'fit')
+  await enterDimension('宽度', 3840)
+  const large = await canvas()
+  assert.equal(large.width, 3840)
+  assert.ok(large.visualWidth < large.width)
+  await click('桌面尺寸')
+  passed('Scaled pointer resize, numeric size, host breakpoints and normal-window clamps', { desktop, half, minimum })
   await click('运行冒烟测试（3 个场景）')
   await until('document.querySelectorAll("tbody tr").length===3')
+  await view.scrollTo('tbody')
   passed('Chinese/light/wide Decisions and three synthetic smoke results', await capture('zh-light-wide-results'))
   await fill('Decisions 模型', 'unsaved-preview-draft')
   assert.equal(await disabled('运行冒烟测试（3 个场景）'), true)
+  await choose('宿主槽位', statsSlot)
+  await until(`${statsPill}?.textContent.includes('自动评审 12 次')`)
+  assert.match(await view.evaluate(`${statsPill}.title`), /阻止 1 · 评审失败 1/)
+  const dock = await view.evaluate(`(() => {
+    const stats = document.querySelector('.preview-stats-dock');
+    const composer = document.querySelector('.preview-composer-card');
+    return {
+      belowComposer: stats.getBoundingClientRect().top >= composer.getBoundingClientRect().bottom,
+      pillFilter: getComputedStyle(stats.lastElementChild).filter,
+      contextFilter: getComputedStyle(composer).filter,
+      formHidden: document.querySelector('.decision-review-panel').getClientRects().length === 0,
+    };
+  })()`)
+  assert.equal(dock.belowComposer, true)
+  assert.equal(dock.pillFilter, 'none')
+  assert.match(dock.contextFilter, /blur\(/)
+  assert.equal(dock.formHidden, true)
+  await capture('zh-light-desktop-dock')
   await choose('界面语言', 'en')
+  await until(`${statsPill}?.textContent === '12 reviewed · 67% auto-passed'`)
+  assert.match(await view.evaluate(`${statsPill}.title`), /1 blocked · Review failures: 1/)
+  passed('Selected statistics slot separates blocked calls and review failures in Chinese and English', dock)
+  await choose('宿主槽位', configSlot)
+  await until(`!document.querySelector('.preview-stats-dock')`)
+  const requestsAfterLeavingDock = statsRequests().length
   await choose('主题', 'dark')
-  await choose('预览宽度', 'narrow')
   await view.resize(390, 844)
+  assert.equal((await canvas()).width, 1280)
+  assert.equal((await canvas()).sidebar, 280)
+  await click('最小窗口')
+  assert.equal((await canvas()).width, 520)
+  assert.equal((await canvas()).sidebar, 0)
   assert.equal(await value('Decisions model'), 'unsaved-preview-draft')
   assert.match(await body(), /Save your changes first/)
-  passed('Language/theme/width preserve unsaved draft; real narrow viewport', await capture('en-dark-narrow-dirty'))
+  await view.scrollTo('.decision-review-panel')
+  passed(
+    'Slot/language/theme/size preserve draft; 390px browser viewport still uses logical host width',
+    await capture('en-dark-narrow-dirty'),
+  )
   const thresholdSummary = '.decision-review-panel > details > summary'
   await view.scrollTo(thresholdSummary)
   await view.click(thresholdSummary)
@@ -141,7 +254,10 @@ try {
     ),
     /Applies to both engines/,
   )
-  passed('English threshold descriptions and linked field help at 390px', await capture('en-dark-narrow-thresholds'))
+  passed(
+    'English threshold descriptions and linked field help in a 520px host window',
+    await capture('en-dark-narrow-thresholds'),
+  )
   await click('Save')
   await until(textIncludes('Settings saved.'))
   await click('重新加载已保存配置')
@@ -158,7 +274,7 @@ try {
   passed('English/light/narrow Follow session', await capture('en-light-session'))
   await choose('界面语言', 'zh')
   await view.resize(1280, 1000)
-  await choose('预览宽度', 'wide')
+  await click('桌面尺寸')
   await scene('load-error', false)
   await until(textIncludes('无法加载设置。'))
   await click('恢复接口')
@@ -187,6 +303,8 @@ last line | 保留空格
   await click('重新加载已保存配置')
   await until('!!document.querySelector("textarea")')
   assert.equal(await value('匹配条件'), multiline)
+  // Chromium snaps outlines to display pixels. Check the CSS width at 1:1.
+  await choose('缩放', '1')
   await view.scrollTo('textarea')
   await view.click('textarea')
   await view.press('Tab', { modifiers: ['Shift'] })
@@ -205,11 +323,12 @@ last line | 保留空格
   assert.ok(semantics.descriptions.every(Boolean))
   await click('保存')
   await until(textIncludes('设置已保存。'))
+  await choose('缩放', 'fit')
   await capture('zh-rules-keyboard')
   await choose('界面语言', 'en')
   await choose('主题', 'dark')
   await view.resize(390, 844)
-  await choose('预览宽度', 'narrow')
+  await click('最小窗口')
   assert.equal(await value('Condition'), multiline)
   await capture('en-dark-narrow-rules')
   const longCondition = 'Long rule condition 中文 | '.repeat(17)
@@ -233,7 +352,7 @@ last line | 保留空格
   await choose('界面语言', 'zh')
   await choose('主题', 'light')
   await view.resize(1280, 1000)
-  await choose('预览宽度', 'wide')
+  await click('桌面尺寸')
   await click('添加规则')
   assert.equal(
     await view.evaluate('document.activeElement === [...document.querySelectorAll("textarea")].at(-1)'),
@@ -250,8 +369,10 @@ last line | 保留空格
   assert.ok(invalid.descriptions.every(Boolean))
   await capture('zh-multiline-validation')
   passed('Multiline text survives save/reload byte-for-byte; blank rule blocks save', { multiline })
+  await view.scrollTo('.decision-review-rule-remove')
   await view.click('.decision-review-rule-remove')
   assert.equal(await view.evaluate('document.activeElement === document.querySelector("textarea")'), true)
+  await view.scrollTo('.decision-review-rule-remove')
   await view.click('.decision-review-rule-remove')
   assert.equal(
     await view.evaluate('document.activeElement === document.querySelector(".decision-review-rules-add")'),
@@ -266,19 +387,25 @@ last line | 保留空格
   assert.equal(await value('Decisions API 地址'), '')
   assert.equal(await value('Decisions 模型'), '')
   assert.match(await body(), /已保存的设置无效/)
-  await view.scrollTo('[role="alert"] summary')
-  await view.click('[role="alert"] summary')
-  assert.match(await body(), /Decisions API 地址必须是/)
-  assert.match(await body(), /请输入 Decisions 模型名称/)
+  const storedAlert = '.decision-review-panel > :nth-child(1 of [role="alert"])'
+  const storedDetails = '.decision-review-panel [role="alert"] summary'
+  await view.scrollTo(storedDetails)
+  await view.click(storedDetails)
+  const alertText = (selector) => view.evaluate(`document.querySelector(${JSON.stringify(selector)})?.innerText`)
+  const storedText = await alertText(storedAlert)
+  assert.match(storedText, /Decisions API 地址必须是/)
+  assert.match(storedText, /请输入 Decisions 模型名称/)
+  const saveAlert = '.decision-review-panel > :nth-child(2 of [role="alert"])'
   await click('保存')
   await until(textIncludes('无法保存设置。'))
-  await until(textIncludes('Decisions API 地址必须是'))
-  await view.scrollTo('.decision-review-panel > [role="alert"]:last-of-type')
+  assert.match(await alertText(saveAlert), /Decisions API 地址必须是/)
+  await view.scrollTo(saveAlert)
   await capture('zh-invalid-settings')
   const savesBeforeLanguageSwitch = requests.filter(({ url }) => url.endsWith('/decision-review/save')).length
   await choose('界面语言', 'en')
   await until(textIncludes('Could not save settings.'))
-  assert.match(await body(), /The Decisions API URL must be an absolute HTTP or HTTPS URL/)
+  assert.match(await alertText(saveAlert), /The Decisions API URL must be an absolute HTTP or HTTPS URL/)
+  assert.match(await alertText(storedAlert), /The Decisions API URL must be an absolute HTTP or HTTPS URL/)
   assert.equal(requests.filter(({ url }) => url.endsWith('/decision-review/save')).length, savesBeforeLanguageSwitch)
   await capture('en-invalid-settings')
   passed('Stored and submitted settings issues switch language without resubmitting')
@@ -346,16 +473,22 @@ last line | 保留空格
   await until('document.querySelectorAll("tbody tr").length===3')
   assert.match(await body(), /评审未能完成此场景/)
   passed('Test request error recovers; mixed synthetic row error renders')
-  await scene('stats-error')
-  await Bun.sleep(250)
-  assert.doesNotMatch(await body(), /自动评审 12 次/)
+  assert.equal(statsRequests().length, requestsAfterLeavingDock, 'Leaving the dock must stop stats polling')
+  await choose('宿主槽位', statsSlot)
+  const requestsBeforeError = statsRequests().length
+  await scene('stats-error', false)
+  await expectStatsResponse(requestsBeforeError, 503)
+  assert.equal(await view.evaluate(`!!${statsPill}`), false)
   await click('恢复接口')
-  await until(textIncludes('自动评审 12 次'), 6500)
-  await scene('stats-empty')
-  await Bun.sleep(250)
+  await until(`${statsPill}?.textContent.includes('自动评审 12 次')`, 6500)
+  const requestsBeforeEmpty = statsRequests().length
+  await scene('stats-empty', false)
+  await expectStatsResponse(requestsBeforeEmpty, 200)
+  await until(`!${statsPill}`)
   assert.doesNotMatch(await body(), /自动评审 12 次/)
   passed('Stats failure recovers on polling; zero-review fixture hides pill')
   if (checkHmr) {
+    await choose('宿主槽位', configSlot)
     await scene('decisions')
     await fill('Decisions 模型', 'hot-refresh-unsaved')
     const before = await view.evaluate('({timeOrigin:performance.timeOrigin})')
@@ -409,8 +542,9 @@ last line | 保留空格
     })
   }
   assert.deepEqual(errors, [])
-  assert.ok(requests.every((request) => new URL(request.url).origin === origin))
-  passed('All browser requests remain localhost; no uncaught runtime exceptions')
+  // Bun inlines the synthetic plugin artwork in the preview stylesheet.
+  assert.ok(requests.every(({ url }) => new URL(url).origin === origin || url.startsWith('data:image/svg+xml;')))
+  passed('All network requests remain localhost; no uncaught runtime exceptions')
 } catch (error) {
   failures.push(error)
 } finally {

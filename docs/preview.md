@@ -1,6 +1,6 @@
 # Bun 独立开发预览
 
-预览用于日常配置界面开发，与 DSH 使用同一套业务组件、样式和中英文文案。固定工具链仍为 npm `bun@1.4.3-canary.20261021.1` 对应的 binary `1.4.4-canary.1`、revision `963452075e9d7e2a47a482f297143af5ed4f76c0`。生产插件继续由 Node `>=24.9.0`、DSH `0.2.2-rc.1` 运行。
+预览用于日常插件界面开发，与 DSH 使用同一套业务组件、样式和中英文文案。固定工具链为 npm `bun@1.4.3-canary.20261021.1` 对应的 binary `1.4.4-canary.1`、revision `963452075e9d7e2a47a482f297143af5ed4f76c0`。生产插件继续由 Node `>=24.9.0`、DSH `0.2.2-rc.1` 或 `0.2.2-rc.2` 运行。
 
 ## 启动与操作
 
@@ -13,12 +13,21 @@ PREVIEW_PORT=0 bun run dev
 
 默认 URL 为 `http://127.0.0.1:4317/`，服务仅绑定本机。没有真实凭据、用户 profile、会话历史或模型请求。配置仅在进程内存中保存；重启服务后消失。只在预览中输入合成测试内容。
 
-控制区固定中文，业务界面可切换中英文、明暗主题与宽/窄展示。窄屏选项把内容区限制为 390px；检查真实移动视口时还需把浏览器窗口或模拟视口改为 390px。
+控制区固定中文。「宿主槽位」只显示选中的实际插件组件；窗口的其余内容是静态模糊的宿主示意。可独立切换中英文与明暗主题。
+
+| 槽位选项 | 注册与位置 |
+| --- | --- |
+| 插件详情 · 配置 | `plugins.row.config` 的 `page` 视图：在插件行的标题和说明下方挂载真实 `ConfigPanel`。该注册另有简短的 `summary` 视图；`plugins.detail.actions` 是详情页顶部的操作槽位。 |
+| 会话输入框 · 统计栏 | `conversation.composer.dock`：在会话输入框卡片下方，和宿主统计读数并排显示真实 `ApprovalStatsPill`。 |
+
+拖动画布右下角，或输入宽、高后按 Enter 或离开输入框，可调整窗口的逻辑尺寸。桌面尺寸为 1280 × 820，最小窗口为 520 × 600；输入和拖动均遵守最小尺寸。「缩放」只改变显示比例；默认「适应空间」让窗口适配可用区域，固定比例下较大的画布可以滚动查看。侧栏与详情留白始终根据逻辑尺寸变化。
 
 - 切换场景或点击「重置当前场景」：丢弃草稿与结果，销毁旧场景，取消旧请求，重新载入初始 fixture。
-- 切换语言、主题或宽度：保留编辑、已保存数据和当前场景。
+- 切换槽位、语言、主题、尺寸或缩放：保留配置草稿、已保存数据和当前场景。离开统计栏会停止轮询，再次打开时重新读取。
 - 「重新加载已保存配置」：丢弃草稿，从当前场景的内存 HTTP 服务重新读取；可检查保存后的规范化结果和多行内容。
-- 「恢复接口」：移除当前场景的模拟故障。保存失败时保留草稿供重试；加载失败时自动重新加载；统计失败后等待下一次轮询。
+- 「恢复接口」：移除当前场景的模拟故障。保存失败时保留草稿供重试；加载失败时自动重新加载；统计失败后在统计栏等待下一次轮询。
+
+macOS 壳以 DSH `dsh-v0.2.2-rc.1`（`66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`）为参照：[桌面主进程](https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/apps/desktop/src/main.ts)定义普通窗口的初始与最小尺寸及交通灯位置；960px 最小宽度只在新手引导期间生效。[窗口列宽](https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-layout/src/client/columns.ts)定义默认 280px 侧栏与 1024px 自动收起阈值，[AppFrame](https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-layout/src/client/AppFrame.tsx)在 macOS 收起时不保留控制栏。[插件页样式](https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-plugin-manager/src/client/PluginManagerPage.module.css)把详情列限制为 960px，并在低于 768px 时使用 20px 横向留白；插件自己的表单最大宽度为 680px。[InputBar](https://github.com/deepseek-ai/deepseek-harness/blob/66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db/packages/client/ui-conversation/src/client/skeleton/InputBar.tsx)在输入框下方渲染 dock。这些是代表性的窗口布局，不引入 DSH 客户端、真实会话或截图，也不作为 rc.2 像素级校对的证据。
 
 ## 场景
 
@@ -48,7 +57,8 @@ PREVIEW_PORT=0 bun run dev
 | `src/client/smoke-test.tsx`、`stats-pill.tsx` | 真实测试结果和统计展示 |
 | `src/client/api.ts` | 两个入口共用的 `ReviewApi` 与 HTTP/JSON 客户端，支持取消 |
 | `src/client/messages.ts`、`styles.ts`、`styles.css` | 两个入口共用的文案与业务样式 |
-| `preview/main.tsx`、`app.tsx` | 独立 React DOM 根和中文控制区；按场景身份重新挂载业务组件 |
+| `preview/main.tsx`、`app.tsx` | 独立 React DOM 根、槽位选择和场景控制 |
+| `preview/canvas.tsx`、`host-preview.tsx` | 可调整的逻辑画布、静态 DSH 宿主壳及业务组件的挂载边界 |
 | `preview/http.ts`、`locale.ts`、`preview.css` | 场景控制请求、语言解析及代表性宿主主题变量注入 |
 | `preview/server.ts`、`service.ts` | Bun HTML 服务、场景生命周期与模拟 HTTP 路由 |
 | `preview/scenes.ts`、`fixtures.ts` | 场景描述和合成输入 |
@@ -59,7 +69,7 @@ PREVIEW_PORT=0 bun run dev
 
 模拟服务直接调用生产的 `normalizeSettings`、`mergeSettingsUpdate` 和 `publicSettings`，保留写入/移除密钥、默认值、严格保存和无损规则行为。合成测试的固定判定输入交给真实 `composeDecision` 和原因翻译，因此阈值变化仍通过同一裁决逻辑。fixture 不做自然语言规则匹配，也不评估模型质量。Session 引擎仅预览其真实配置行为，沿用生产界面对冒烟测试的禁用。
 
-业务组件接收 `t`、`resolveText`、稳定的 `ReviewApi` 和必要的 `sessionId`，不直接依赖宿主服务实例。宿主使用其真实 locale 与 CSS 变量；预览注入代表性明暗配色。预览可验证变量适配、布局和文案，但不承诺与任一宿主主题逐像素相同。
+业务组件接收 `t`、`resolveText`、稳定的 `ReviewApi` 和必要的 `sessionId`，不直接依赖宿主服务实例。宿主使用其真实 locale 与 CSS 变量；预览注入代表性明暗配色，并通过页面标记让 Dark Reader 跳过预览，避免浏览器扩展覆盖所选主题。预览可验证变量适配、布局和文案，但不承诺与任一宿主主题逐像素相同。
 
 ## UI 维护约定
 

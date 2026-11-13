@@ -119,7 +119,7 @@ bun run dev
 PREVIEW_PORT=0 bun run dev
 ```
 
-The preview runs the real configuration form, rule editor, smoke results and statistics pill, with the same styles and English/Chinese dictionaries as DSH. Its Chinese control bar switches language, light/dark theme, width and 11 repeatable scenarios. A localhost Bun HTTP service keeps synthetic settings in memory and uses the production validators; it never opens a DSH profile or calls a model. Scene switches/reset discard drafts and cancel old requests; language/theme/width changes preserve the draft.
+The preview shows the real configuration form or statistics pill in its DSH slot, with the same styles and English/Chinese dictionaries as the plugin. Its Chinese controls select a slot, language, theme and one of 11 repeatable scenarios. The resizable canvas follows the macOS window layout and can zoom independently of its logical dimensions. A localhost Bun HTTP service keeps synthetic settings in memory and uses the production validators. Scene changes and resets discard drafts and cancel old requests; slot, language, theme, size and zoom changes preserve the draft. Leaving the statistics slot stops polling.
 
 The pinned Bun supports state-preserving TSX Fast Refresh and CSS updates. HTML entry changes reload the page; server/fixture changes require a server restart and page reload. See [preview development](docs/preview.md) for extension points, exact HMR semantics and the optional real-browser verifier, and [acceptance evidence](docs/preview-acceptance.md) for results and screenshots. Preview code and React DOM stay in development; production still uses the host's shared React instance and the same nine-file package contract.
 
