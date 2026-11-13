@@ -14,6 +14,22 @@ describe('generated plugin stylesheet scope', () => {
     ).not.toThrow()
   })
 
+  test('does not hide a sibling combinator between comment brackets', () => {
+    const css = '.decision-review-panel /* [ */ + div /* ] */ { color: rgb(1, 2, 3); }'
+    expect(() => assertScopedStylesheet(css)).toThrow('CSS selector escapes plugin scope')
+  })
+
+  test('keeps comment delimiters inside quoted attribute values', () => {
+    expect(() =>
+      assertScopedStylesheet(String.raw`.decision-review-panel[data-value="/* [ + ] */"] { color: red; }`),
+    ).not.toThrow()
+    expect(() =>
+      assertScopedStylesheet(
+        String.raw`.decision-review-panel[data-value="/*"] + div[data-value="*/"] { color: red; }`,
+      ),
+    ).toThrow('CSS selector escapes plugin scope')
+  })
+
   test.each([
     'body { color: rgb(1,2,3); }',
     '.dr\\:block, body { color: rgb(1,2,3); }',

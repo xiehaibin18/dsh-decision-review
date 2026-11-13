@@ -73,8 +73,14 @@ function assertScopedSelector(selector, nested) {
   if (!name && !(nested && /^&(?=$|[.:[\s>])/.test(selector))) {
     throw new Error(`Unscoped CSS selector: ${selector}`)
   }
+  // Comment brackets are not selector tokens. Consume quoted or escaped text
+  // as a whole so comment delimiters in attribute values remain untouched.
+  const withoutComments = selector.replace(
+    /\\[\s\S]|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|\/\*[\s\S]*?\*\//g,
+    (token) => (token.startsWith('/*') ? ' ' : token),
+  )
   // Strip functions, attributes and escapes before checking combinators. A
   // sibling of a scoped element is not necessarily part of the plugin.
-  const outside = selector.replace(/\\.|"[^"]*"|'[^']*'|\[[^\]]*\]|\([^()]*(?:\([^()]*\)[^()]*)*\)/g, '')
+  const outside = withoutComments.replace(/\\.|"[^"]*"|'[^']*'|\[[^\]]*\]|\([^()]*(?:\([^()]*\)[^()]*)*\)/g, '')
   if (/[+~]|\|\|/.test(outside)) throw new Error(`CSS selector escapes plugin scope: ${selector}`)
 }

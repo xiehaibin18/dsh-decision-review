@@ -36,6 +36,8 @@ Tailwind 在构建时生成带 `dr:` 前缀的工具类，只扫描控件目录�
 
 审查修复的[前后对照与验收](evidence/base-ui/review-fixes.json)及[新归档记录](evidence/base-ui/review-fixes-package.json)与初次交付证据分开保留。实际宿主统计弹层仍未验证。
 
+复审发现，选择器注释里的方括号能遮住相邻组合符，导致两道检查放过会影响插件外元素的规则。现在检查组合符前先忽略真实注释，并保留引号内的内容。[复审反例与字节对照](evidence/base-ui/review-comment-fix.json)记录了修复前后的结果；正常客户端与安装归档字节未变。
+
 ## 原生控件原型（历史记录）
 
 状态：2026 年 11 月 12 日的评估原型，尚未正式采纳或部署。基于 main `ced2775cab757bef69a442b1d96b8276b3e84153`，全部开发、安装和构建在独立工作树 `5230/dsh-decision-review`。真实桌面 profile、主目录的链接安装产物和宿主源码不属于本次写入范围。
