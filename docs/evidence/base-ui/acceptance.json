@@ -1,0 +1,450 @@
+{
+  "status": "passed_with_scope_limits",
+  "base": "d6555c050b1cc23f42359aed05ba7e9b6dee99ce",
+  "source": "Approved codex/base-ui-shadcn working tree before delivery documentation and commit",
+  "product_file_count": 94,
+  "product_sha256": "e81c0312a49e2f6712c3a593c666d3bc59d4d65ee826da3f37d288484a53c306",
+  "product_hash_definition": "Sorted unique git ls-files -co --exclude-standard paths in src/, scripts/, preview/, assets/, test/, patches/, package.json, bun.lock, bunfig.toml and tsconfig*: concatenate path + NUL + SHA256(file bytes) + LF, then SHA256.",
+  "checks": {
+    "engineering": {
+      "command": "bun run check",
+      "passed": 285,
+      "failed": 0
+    },
+    "package": {
+      "command": "bun run verify:package",
+      "source_tests_passed": 285,
+      "installed_tests_passed": 264,
+      "report": "package-verification.json",
+      "bytes": "final-bytes.json"
+    }
+  },
+  "preview": {
+    "status": "passed",
+    "revision": "963452075e9d7e2a47a482f297143af5ed4f76c0",
+    "checks": [
+      {
+        "name": "Scaled pointer resize, numeric size, host breakpoints and normal-window clamps",
+        "details": {
+          "desktop": {
+            "width": 1280,
+            "height": 820,
+            "visualWidth": 1124.671875,
+            "visualHeight": 720.5,
+            "sidebar": 280,
+            "inset": "48px"
+          },
+          "half": {
+            "width": 1280,
+            "height": 820,
+            "visualWidth": 640,
+            "visualHeight": 410,
+            "sidebar": 280,
+            "inset": "48px"
+          },
+          "minimum": {
+            "width": 520,
+            "height": 600,
+            "visualWidth": 260,
+            "visualHeight": 300,
+            "sidebar": 0,
+            "inset": "20px"
+          }
+        }
+      },
+      {
+        "name": "Chinese/light/wide Decisions and three synthetic smoke results",
+        "details": {
+          "width": 1280,
+          "height": 913,
+          "scrollWidth": 1280,
+          "scrollHeight": 913,
+          "canvas": {
+            "width": 1280,
+            "height": 820,
+            "visualWidth": 1124.671875,
+            "visualHeight": 720.5,
+            "sidebar": 280,
+            "inset": "48px"
+          }
+        }
+      },
+      {
+        "name": "Dock opens only on press; click, Escape and outside dismiss; localized details stay within the canvas at 50%",
+        "details": {
+          "dock": {
+            "belowComposer": true,
+            "pillFilter": "none",
+            "contextFilter": "blur(1.8px)",
+            "formHidden": true
+          },
+          "light": {
+            "fits": true,
+            "above": true,
+            "clickable": true,
+            "cardX": 754.8975830078125,
+            "cardY": 798.3035888671875,
+            "scale": 0.87864990234375,
+            "background": "rgb(255, 255, 255)"
+          },
+          "dark": {
+            "fits": true,
+            "above": true,
+            "clickable": true,
+            "cardX": 754.8975830078125,
+            "cardY": 798.3035888671875,
+            "scale": 0.87864990234375,
+            "background": "rgb(37, 40, 48)"
+          },
+          "minimumStats": {
+            "fits": true,
+            "above": true,
+            "clickable": true,
+            "cardX": 178.3125,
+            "cardY": 555.5,
+            "scale": 0.5,
+            "background": "rgb(37, 40, 48)"
+          }
+        }
+      },
+      {
+        "name": "Slot/language/theme/size preserve draft; 390px browser viewport still uses logical host width",
+        "details": {
+          "width": 390,
+          "height": 844,
+          "scrollWidth": 390,
+          "scrollHeight": 844,
+          "canvas": {
+            "width": 520,
+            "height": 600,
+            "visualWidth": 370,
+            "visualHeight": 426.921875,
+            "sidebar": 0,
+            "inset": "20px"
+          }
+        }
+      },
+      {
+        "name": "Five thresholds, real drag at fit and 50%, keyboard endpoints, and nonoverlapping persisted flags",
+        "details": {
+          "minFlag": {
+            "left": 39.4375,
+            "right": 350.5625,
+            "flags": [
+              {
+                "score": 0.75,
+                "left": 231.14453125,
+                "right": 286.66015625,
+                "top": 639.578125,
+                "bottom": 652.96875
+              },
+              {
+                "score": 0,
+                "left": 39.4375,
+                "right": 78.484375,
+                "top": 670.03125,
+                "bottom": 683.421875
+              }
+            ],
+            "scoreFits": true
+          },
+          "maxFlag": {
+            "left": 39.4375,
+            "right": 350.5625,
+            "flags": [
+              {
+                "score": 0.8499899558055444,
+                "left": 256.70233154296875,
+                "right": 312.21795654296875,
+                "top": 733.296875,
+                "bottom": 746.6875
+              },
+              {
+                "score": 1,
+                "left": 311.515625,
+                "right": 350.5625,
+                "top": 763.75,
+                "bottom": 777.140625
+              }
+            ],
+            "scoreFits": true
+          },
+          "closeFlags": {
+            "left": 39.4375,
+            "right": 350.5625,
+            "flags": [
+              {
+                "score": 0.5,
+                "left": 169.734375,
+                "right": 220.265625,
+                "top": 840.890625,
+                "bottom": 854.28125
+              },
+              {
+                "score": 0.5099939734833266,
+                "left": 171.9160919189453,
+                "right": 223.2754669189453,
+                "top": 871.34375,
+                "bottom": 884.734375
+              }
+            ],
+            "scoreFits": true
+          },
+          "sameFlag": {
+            "left": 39.4375,
+            "right": 350.5625,
+            "flags": [
+              {
+                "score": 0.6999799116110887,
+                "left": 201.08749389648438,
+                "right": 281.2749938964844,
+                "top": 1028.328125,
+                "bottom": 1041.71875
+              }
+            ],
+            "scoreFits": true
+          }
+        }
+      },
+      {
+        "name": "Successful save and HTTP reload persist normalized values"
+      },
+      {
+        "name": "English/light/narrow Follow session",
+        "details": {
+          "width": 390,
+          "height": 844,
+          "scrollWidth": 390,
+          "scrollHeight": 844,
+          "canvas": {
+            "width": 520,
+            "height": 600,
+            "visualWidth": 370,
+            "visualHeight": 426.921875,
+            "sidebar": 0,
+            "inset": "20px"
+          }
+        }
+      },
+      {
+        "name": "Config HTTP 503 recovers by restoring endpoint and reloading"
+      },
+      {
+        "name": "Save HTTP 503 preserves draft and flags; successful retry advances saved flag"
+      },
+      {
+        "name": "Dark Select flips inside a 520 × 600 canvas at 50%; items receive pointer input and Tab returns to form order",
+        "details": {
+          "inFrame": true,
+          "optionsClickable": true,
+          "gap": 1.75,
+          "offset": 0,
+          "sameTheme": true,
+          "scale": 0.5
+        }
+      },
+      {
+        "name": "Chinese rule copy and accessible names switch without editing the long draft",
+        "details": {
+          "width": 390,
+          "height": 844,
+          "scrollWidth": 390,
+          "scrollHeight": 844,
+          "canvas": {
+            "width": 520,
+            "height": 600,
+            "visualWidth": 370,
+            "visualHeight": 426.921875,
+            "sidebar": 0,
+            "inset": "20px"
+          }
+        }
+      },
+      {
+        "name": "Multiline text survives save/reload byte-for-byte; blank rule blocks save",
+        "details": {
+          "multiline": "  第一行\n\n  npm test -- --runInBand\nlast line | 保留空格  \n"
+        }
+      },
+      {
+        "name": "Keyboard select, focus ring, linked errors, add/remove focus and bilingual narrow rules",
+        "details": {
+          "semantics": {
+            "label": "匹配条件",
+            "required": "true",
+            "descriptions": [
+              "52/400 个字符"
+            ]
+          },
+          "invalid": {
+            "invalid": "true",
+            "descriptions": [
+              "请输入匹配条件。",
+              "0/400 个字符"
+            ]
+          }
+        }
+      },
+      {
+        "name": "Two required radio groups accept arrows and one Tab stop; timeout rejects extra precision and persists 5.001 s",
+        "details": {
+          "required": "true",
+          "count": 2,
+          "tabStops": 1,
+          "description": "Decisions 会把评审所需的上下文发送到配置的 API 地址；「跟随会话」沿用会话的模型路由，单独发起评审请求。",
+          "fits": true
+        }
+      },
+      {
+        "name": "Saved key removal uses the theme danger color and remains cancellable before Save",
+        "details": {
+          "lightDanger": {
+            "color": "rgb(181, 45, 40)",
+            "background": "color(srgb 0.973882 0.925882 0.924118)",
+            "dangerColor": "rgb(181, 45, 40)"
+          },
+          "darkDanger": {
+            "color": "rgb(255, 139, 131)",
+            "background": "color(srgb 0.222039 0.191804 0.217529)",
+            "dangerColor": "rgb(255, 139, 131)"
+          }
+        }
+      },
+      {
+        "name": "Stored and submitted settings issues switch language without resubmitting"
+      },
+      {
+        "name": "Invalid stored route/model require real validation and repair while keeping session engine"
+      },
+      {
+        "name": "Switch during delayed load cancels old scene without stale form"
+      },
+      {
+        "name": "Saving state preserves newer model, rule and threshold drafts while flags track the saved response",
+        "details": {
+          "savingAfterEdits": true,
+          "responsePendingAfterEdits": true,
+          "responseStatus": 200
+        }
+      },
+      {
+        "name": "Switch during delayed smoke cancels old results"
+      },
+      {
+        "name": "Test request error recovers; mixed synthetic row error renders"
+      },
+      {
+        "name": "Stats failure recovers on polling; zero-review fixture hides pill"
+      },
+      {
+        "name": "All network requests remain localhost; no uncaught runtime exceptions"
+      }
+    ],
+    "errors": []
+  },
+  "host_configuration": {
+    "status": "passed",
+    "checks": [
+      {
+        "name": "Installed host rendered real shared rule editor with one scoped stylesheet",
+        "release": {
+          "version": "0.2.2-rc.2",
+          "commit": "a6b1b85"
+        }
+      },
+      {
+        "name": "Host keyboard switches one required radio; stored 5200ms renders as 5.2 seconds"
+      },
+      {
+        "name": "Host mounts five thresholds; keyboard moves by 0.01 while the saved/default flag stays fixed"
+      },
+      {
+        "name": "zh-light-open-select",
+        "metrics": {
+          "panelPortal": true,
+          "clickable": true,
+          "inputFill": "rgb(53, 54, 56)",
+          "popupFill": "rgb(53, 54, 56)",
+          "width": 1280,
+          "label": "评审结论"
+        }
+      },
+      {
+        "name": "zh-light-rules",
+        "metrics": {
+          "width": 1280,
+          "scrollWidth": 1280,
+          "editor": {
+            "x": 328,
+            "width": 680,
+            "right": 1008
+          },
+          "dark": false,
+          "inputFill": "rgb(255, 255, 255)",
+          "inputColor": "rgb(15, 17, 21)"
+        }
+      },
+      {
+        "name": "Keyboard verdict and exact multiline text persisted across closing/reopening host config",
+        "multiline": "  第一行\n\n  npm test -- --runInBand\nlast line | 保留空格  \n"
+      },
+      {
+        "name": "zh-dark-rules",
+        "metrics": {
+          "width": 1280,
+          "scrollWidth": 1280,
+          "editor": {
+            "x": 328,
+            "width": 680,
+            "right": 1008
+          },
+          "dark": true,
+          "inputFill": "rgb(53, 54, 56)",
+          "inputColor": "rgb(249, 250, 251)"
+        }
+      },
+      {
+        "name": "zh-dark-narrow-rules",
+        "metrics": {
+          "width": 390,
+          "scrollWidth": 390,
+          "editor": {
+            "x": 20,
+            "width": 345,
+            "right": 365
+          },
+          "dark": true,
+          "inputFill": "rgb(53, 54, 56)",
+          "inputColor": "rgb(249, 250, 251)"
+        }
+      },
+      {
+        "name": "zh-dark-narrow-open-select",
+        "metrics": {
+          "panelPortal": true,
+          "clickable": true,
+          "inputFill": "rgb(53, 54, 56)",
+          "popupFill": "rgb(53, 54, 56)",
+          "width": 390,
+          "label": "评审结论"
+        }
+      },
+      {
+        "name": "Validation, adjacent/empty focus restoration, live host theme and 390px viewport with collapsed sidebar passed"
+      }
+    ],
+    "errors": []
+  },
+  "limitations": [
+    "The actual DSH rc.2 blank synthetic session does not render conversation.composer.dock. Actual-host statistics popover acceptance remains unverified; the shared preview covers its interactions.",
+    "The supported rc.1 shared-module contract was source-checked, not rerun in a browser.",
+    "No real user profile, model call, deployment, touch, IME, or screen-reader acceptance.",
+    "The earlier 24-group HMR run and negative build probes belong to initial Base UI integration, not a rerun on final product bytes. A live multi-file edit temporarily loaded the stats consumer before its new translation keys and reset the preview; the two observed empty rule drafts were restored without saving."
+  ],
+  "screenshots": [
+    "config-controls.png",
+    "threshold-flags.png",
+    "review-stats.png",
+    "review-stats-minimum.png"
+  ]
+}

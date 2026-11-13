@@ -2,29 +2,34 @@
 import * as React from 'react'
 import type { Translate } from './messages.js'
 import { NOTE } from './styles.js'
+import { Field, FieldDescription, FieldLabel } from './ui/field.js'
 
-export function Field({
+export function SettingField({
   label,
   children,
   hint,
+  error,
 }: {
   label: string
-  children: React.ReactElement<Pick<React.AriaAttributes, 'aria-describedby'>>
+  children: (control: { id: string; 'aria-describedby'?: string }) => React.ReactNode
   hint?: string | null
+  error?: string | null
 }) {
-  const hintId = React.useId()
+  const id = React.useId()
+  const hintId = id + '-hint'
+  const errorId = id + '-error'
+  const describedBy = [hint && hintId, error && errorId].filter(Boolean).join(' ') || undefined
   return (
-    <div style={{ minWidth: 0 }}>
-      <label style={{ display: 'grid', gap: 4 }}>
-        <span>{label}</span>
-        {hint ? React.cloneElement(children, { 'aria-describedby': hintId }) : children}
-      </label>
-      {hint && (
-        <div id={hintId} style={{ ...NOTE, marginTop: 4 }}>
-          {hint}
-        </div>
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      {children({ id, 'aria-describedby': describedBy })}
+      {hint && <FieldDescription id={hintId}>{hint}</FieldDescription>}
+      {error && (
+        <p role="alert" id={errorId} className="decision-review-field-error">
+          {error}
+        </p>
       )}
-    </div>
+    </Field>
   )
 }
 

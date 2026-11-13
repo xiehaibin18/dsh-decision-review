@@ -3,6 +3,7 @@ import { PreviewApp } from './app.js'
 import { createSession, type ActiveSession } from './http.js'
 import '../src/client/styles.css'
 import './preview.css'
+import '../src/client/ui/control-styles.generated.css'
 
 const container = document.getElementById('root')!
 const hotState = import.meta.hot.data as { root?: Root; initialSession?: ActiveSession }

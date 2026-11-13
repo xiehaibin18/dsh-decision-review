@@ -12,7 +12,7 @@ Reviewer approval never overrides host denial, confirmation, or cancellation. Va
 
 Use strict TypeScript, camelCase functions/variables, PascalCase components/types, UPPER_SNAKE_CASE constants, kebab-case filenames, and `.js` import suffixes. Bun formatting uses two spaces, single quotes, no semicolons, and 120 columns.
 
-Use native React controls and scoped CSS for the current rules form. Derive render values directly; handle user actions in handlers. Effects may synchronize external resources with explicit cleanup and stale-response protection.
+Use the vendored shadcn/ui Base UI controls and scoped styles for the configuration form and rules editor; see the [integration notes](docs/ui-style-evaluation.md#当前接入决策). Derive render values directly; handle user actions in handlers. Effects may synchronize external resources with explicit cleanup and stale-response protection.
 
 Route product copy, including errors and accessibility labels, through bilingual dictionaries. Preserve user/model text and rule whitespace; use stable identifiers for logic. Follow [preview guidance](docs/preview.md#ui-维护约定): prototype important interactions in the shared preview; verify small edits directly.
 

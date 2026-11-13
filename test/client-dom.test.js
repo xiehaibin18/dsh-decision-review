@@ -37,12 +37,12 @@ describe('built client in a simulated DSH host', () => {
       const url = new URL(path, CLIENT_ORIGIN)
       return host.routes.get(url.pathname).fetch(new Request(url, init))
     })
-    client.load()
+    await client.load()
     client.language = 'zh'
     await client.render(CONFIG_SLOT, { view: 'page' })
-    const endpoint = [...client.container.querySelectorAll('label')]
-      .find((label) => label.textContent.startsWith('Decisions API 地址'))
-      .querySelector('input')
+    const endpoint = [...client.container.querySelectorAll('label')].find((label) =>
+      label.textContent.startsWith('Decisions API 地址'),
+    ).control
     await client.change(endpoint, 'invalid-endpoint')
     await act(async () => client.button('保存').click())
     const error = () => client.container.querySelector('[role="alert"]').textContent
@@ -96,7 +96,7 @@ describe('built client in a simulated DSH host', () => {
       requests.push({ path, sent, received: await response.clone().json() })
       return response
     })
-    client.load()
+    await client.load()
     const { container } = client
     const stylesheet = client.window.document.querySelector('style[data-decision-review]')
     expect(stylesheet?.textContent).toContain('.decision-review-panel')
@@ -110,7 +110,7 @@ describe('built client in a simulated DSH host', () => {
     const click = (label) => act(async () => button(label).click())
     const password = () => container.querySelector('input[type=password]')
     const rule = () => container.querySelector('textarea')
-    const verdict = () => rule().closest('section').querySelector('select')
+    const verdict = () => rule().closest('section').querySelector('[role="combobox"]')
 
     await client.render(CONFIG_SLOT, { view: 'page' })
     expect(container.textContent).toMatch(/Decision Review/)
@@ -120,7 +120,7 @@ describe('built client in a simulated DSH host', () => {
 
     await click('Add rule')
     await client.change(rule(), condition)
-    await client.change(verdict(), 'deny')
+    await client.choose(verdict(), 'Deny')
     expect(button('Run smoke test (3 scenarios)').disabled).toBe(true)
     await click('Run smoke test (3 scenarios)')
     expect(requests).toHaveLength(1)
@@ -138,7 +138,7 @@ describe('built client in a simulated DSH host', () => {
     await client.render(CONFIG_SLOT, { view: 'page' })
     expect(container.textContent).toMatch(/决策评审/)
     expect(rule().value).toBe(condition)
-    expect(verdict().value).toBe('deny')
+    expect(verdict().textContent).toBe('拒绝')
     expect(password().value).toBe('')
     expect(password().placeholder).toMatch(/已保存/)
 
@@ -201,11 +201,23 @@ describe('composer approval stats pill', () => {
     })
   }
 
+  const trigger = () => client.container.querySelector('button[aria-haspopup="dialog"]')
+  const card = () => client.container.querySelector('[role="dialog"]')
+
+  function metrics() {
+    return Object.fromEntries(
+      [...card().querySelectorAll('dl > div')].map((row) => [
+        row.querySelector('dt').textContent,
+        row.querySelector('dd').textContent,
+      ]),
+    )
+  }
+
   async function render(sessionId) {
     await client.render(STATS_SLOT, { sessionId })
   }
 
-  function openClient() {
+  async function openClient() {
     jest.useFakeTimers()
     hidden = false
     fetchStats = mock(async (url) => {
@@ -213,7 +225,7 @@ describe('composer approval stats pill', () => {
     })
     client = createClient(fetchStats)
     Object.defineProperty(client.window.document, 'hidden', { get: () => hidden })
-    client.load()
+    await client.load()
   }
 
   afterEach(async () => {
@@ -226,7 +238,7 @@ describe('composer approval stats pill', () => {
   })
 
   test.serial('polls the normalized session on schedule, skips hidden pages, and stops on unmount', async () => {
-    openClient()
+    await openClient()
     fetchStats
       .mockResolvedValueOnce(statsResponse())
       .mockResolvedValueOnce(
@@ -245,18 +257,28 @@ describe('composer approval stats pill', () => {
     await advance(1)
     expect(fetchStats).toHaveBeenCalledTimes(2)
     expect(client.container.textContent).toBe('6 reviewed · 50% auto-passed')
-    expect(client.container.querySelector('[title]').title).toBe(
-      'Auto review this session: 6 calls · 3 auto-passed · 1 sent for approval · 1 blocked · Review failures: 1',
-    )
+    expect(trigger().hasAttribute('title')).toBe(false)
+    expect(card()).toBeNull()
+    await act(async () => trigger().click())
+    expect(trigger().getAttribute('aria-expanded')).toBe('true')
+    expect(metrics()).toEqual({
+      'Auto-pass rate': '50%',
+      'Auto-passed': '3',
+      'Sent for approval': '1',
+      Blocked: '1',
+      'Review failures': '1',
+    })
 
     hidden = true
     await advance(8000)
     expect(fetchStats).toHaveBeenCalledTimes(2)
-    expect(client.container.textContent).toBe('6 reviewed · 50% auto-passed')
+    expect(trigger().textContent).toBe('6 reviewed · 50% auto-passed')
     hidden = false
     await advance(4000)
     expect(fetchStats).toHaveBeenCalledTimes(3)
-    expect(client.container.textContent).toBe('8 reviewed · 75% auto-passed')
+    expect(trigger().textContent).toBe('8 reviewed · 75% auto-passed')
+    expect(card()).not.toBeNull()
+    expect(metrics()['Auto-passed']).toBe('6')
 
     await client.unmount()
     await advance(8000)
@@ -265,7 +287,7 @@ describe('composer approval stats pill', () => {
   })
 
   test.serial('clears stats on session change and polls without overlapping requests', async () => {
-    openClient()
+    await openClient()
     const previous = Promise.withResolvers()
     const current = Promise.withResolvers()
     const pending = Promise.withResolvers()
@@ -281,6 +303,8 @@ describe('composer approval stats pill', () => {
     try {
       await render('session-old')
       expect(client.container.textContent).toBe('1 reviewed · 100% auto-passed')
+      await act(async () => trigger().click())
+      expect(card()).not.toBeNull()
       await advance(4000)
       expect(fetchStats).toHaveBeenCalledTimes(2)
       await advance(8000)
@@ -296,6 +320,8 @@ describe('composer approval stats pill', () => {
       expect(client.container.textContent).toBe('')
       await act(async () => current.resolve(currentStats))
       expect(client.container.textContent).toBe('2 reviewed · 50% auto-passed')
+      expect(trigger().getAttribute('aria-expanded')).toBe('false')
+      expect(card()).toBeNull()
 
       await act(async () => previous.resolve(obsoleteStats))
       expect(client.container.textContent).toBe('2 reviewed · 50% auto-passed')

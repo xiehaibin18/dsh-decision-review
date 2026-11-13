@@ -1,6 +1,8 @@
 /** Settings and JSON messages exchanged between the plugin host and its configuration UI. */
 
 export const API_BASE = '/api/decision-review'
+export const TIMEOUT_MIN_MS = 5000
+export const TIMEOUT_MAX_MS = 600000
 export const RULE_VERDICTS = ['allow', 'allow_if_requested', 'ask', 'deny'] as const
 export const RULE_MAX_COUNT = 20
 export const RULE_MAX_CONDITION = 400
@@ -34,6 +36,13 @@ export type ReviewEngine = 'decisions' | 'session'
 export type DenialRoute = 'ask' | 'final'
 export type RuleVerdict = (typeof RULE_VERDICTS)[number]
 export type Threshold = (typeof THRESHOLDS)[number]
+export const THRESHOLD_DEFAULTS = {
+  tConf: 0.75,
+  tHighPred: 0.85,
+  tMedPred: 0.5,
+  tStrongPred: 0.8,
+  tAuth: 0.7,
+} as const satisfies Record<Threshold, number>
 export type TestScenarioName = (typeof TEST_SCENARIO_NAMES)[number]
 export type Risk = 'low' | 'medium' | 'high'
 

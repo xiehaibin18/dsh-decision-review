@@ -2,6 +2,7 @@ import { expect, mock } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { JSDOM } from 'jsdom'
 import React, { act } from 'react'
+import * as jsxRuntime from 'react/jsx-runtime'
 
 export const CLIENT_ORIGIN = 'https://dsh.example.test'
 export const CONFIG_SLOT = 'plugins.row.config'
@@ -10,7 +11,11 @@ export const STATS_SLOT = 'conversation.composer.dock'
 const bundle = readFileSync(new URL('../dist/client.js', import.meta.url), 'utf8')
 
 export function createClient(fetch) {
-  const { window } = new JSDOM('<div id="root"></div>', { runScripts: 'outside-only', url: CLIENT_ORIGIN })
+  const { window } = new JSDOM('<div id="root"></div>', {
+    pretendToBeVisual: true,
+    runScripts: 'outside-only',
+    url: CLIENT_ORIGIN,
+  })
   const container = window.document.getElementById('root')
   const globals = { window, document: window.document, IS_REACT_ACT_ENVIRONMENT: true }
   const originalDescriptors = Object.keys(globals).map((name) => [
@@ -19,6 +24,7 @@ export function createClient(fetch) {
   ])
   Object.assign(globalThis, globals)
 
+  const sharedModules = { react: React, 'react/jsx-runtime': jsxRuntime }
   const slots = new Map()
   let messages
   let language = 'en'
@@ -36,8 +42,8 @@ export function createClient(fetch) {
     load({ id, factory }) {
       expect(id).toBe('@local/decision-review')
       const client = factory((name) => {
-        expect(name).toBe('react')
-        return React
+        expect(Object.hasOwn(sharedModules, name)).toBe(true)
+        return sharedModules[name]
       })
       expect([...client.inject]).toEqual(['slots', 'locale'])
       disposeLocale = client.apply({
@@ -78,7 +84,11 @@ export function createClient(fetch) {
     window,
     container,
     unregisterLocale,
-    load: () => window.eval(bundle),
+    async load() {
+      // React DOM probes browser support when it is first evaluated.
+      sharedModules['react-dom'] = await import('react-dom')
+      window.eval(bundle)
+    },
     get messages() {
       return messages
     },
@@ -115,13 +125,23 @@ export function createClient(fetch) {
         (node) => (node.getAttribute('aria-label') ?? node.textContent.replace(/^\+ /, '')) === label,
       )
     },
+    async choose(control, label) {
+      await act(async () => control.click())
+      const option = [...container.querySelectorAll('[role="option"]')].find((node) => node.textContent === label)
+      expect(option, `Missing option: ${label}`).toBeDefined()
+      await act(async () => {
+        option.click()
+        // jsdom runs Base UI's focus and layout work on the next visual frame.
+        await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)))
+      })
+      expect(control.getAttribute('aria-expanded')).toBe('false')
+    },
     async change(control, value) {
       // Call the native setter so React's value tracker observes the DOM event.
       const { set } = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), 'value')
-      const event = control.tagName === 'SELECT' ? 'change' : 'input'
       await act(async () => {
         set.call(control, value)
-        control.dispatchEvent(new window.Event(event, { bubbles: true }))
+        control.dispatchEvent(new window.Event('input', { bubbles: true }))
       })
     },
   }

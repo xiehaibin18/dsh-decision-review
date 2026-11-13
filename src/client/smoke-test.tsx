@@ -2,8 +2,9 @@
 import * as React from 'react'
 import { TEST_SCENARIO_NAMES, type TestResult } from '../shared/contracts.js'
 import { TechnicalDetails } from './components.js'
+import { Button } from './ui/button.js'
 import type { ResolveText, Translate } from './messages.js'
-import { BORDER, DANGER, HEADING, MUTED, NOTE, ROW, STACK, buttonStyle } from './styles.js'
+import { BORDER, DANGER, HEADING, MUTED, NOTE, ROW, STACK } from './styles.js'
 
 interface SmokeResultsProps {
   t: Translate
@@ -82,9 +83,9 @@ export function SmokeTest({ t, resolveText, isDecisions, dirty, saving, running,
       <h2 style={HEADING}>{t('test.title')}</h2>
       <p style={NOTE}>{t('test.desc')}</p>
       <div style={ROW}>
-        <button type="button" onClick={onRun} disabled={disabled} style={buttonStyle(disabled)}>
+        <Button variant="outline" onClick={onRun} disabled={disabled}>
           {running ? t('test.running') : t('test.run', { count: TEST_SCENARIO_NAMES.length })}
-        </button>
+        </Button>
         {!isDecisions ? (
           <span style={NOTE}>{t('test.sessions')}</span>
         ) : dirty ? (

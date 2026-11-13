@@ -1,35 +1,65 @@
 # UI 组件与样式选型验证
 
+## 当前接入决策
+
+已选用官方 shadcn/ui 的 Base UI 版本，范围是配置面板、规则编辑器与会话统计卡片。共享的 Button、Input、Textarea、Select、Radio Group、Slider、Popover、Field 和 Label 源码以官方 [`shadcn@4.23.0` 的 Base registry](https://github.com/shadcn-ui/ui/tree/96da9cc7f1aa10580a3741664e2a77c721206c00/apps/v4/registry/bases/base/ui) 为起点，采用 [Base Nova registry 样式](https://ui.shadcn.com/r/styles/base-nova/select.json)的紧凑表单组合，保留实际使用的变体。布局、颜色和焦点改为插件作用域及 DSH 主题变量；不接入全局模板或其他产品区。组件源码的许可随安装包交付。
+
+Base UI 固定为 `1.9.0`，Tailwind 和 CLI 固定为 `4.3.5`；React 18 保持由宿主提供。增加的唯一共享模块是 `react-dom`，两个受支持宿主的导出见下方历史探针。Button 和 Textarea 的 React 18 引用用于规则增删焦点；Select 沿用官方组合，使用表单自己的非模态 Portal，按滚动裁切边界定位。产品文案、保存协议、草稿、规则校验与评审逻辑保持现有实现。
+
+Tailwind 在构建时生成带 `dr:` 前缀的工具类，只扫描控件目录。生成文件不包含 Preflight、全局主题选择器或 `--tw-*` 内部属性；带此类内部属性的工具类改用插件 CSS 或独立属性。两种入口消费同一份生成 CSS。新增依赖及更新流程见[开发指引](development.md#表单控件与样式)。
+
+两个必选项（评审引擎、拒绝后的处理方式）用可见的单选组，窄窗口自动换行；四个规则结论继续用 Select。配置超时以秒显示和编辑（5–600，默认 60，最多三位小数），API 和设置文件保留整数毫秒。移除密钥使用危险按钮样式，保存才提交，保存前仍可撤销。
+
+五个 Decisions 阈值使用 0–1 的横向滑块，方向键每次调整 0.01；已有更高精度的设置在未调整时按原值保存。旗标的默认分数来自服务端同一份定义，另一个分数以最近一次成功保存返回的配置为准。相同分数合并显示，其他分数上下分开；保存失败不会移动旗标，保存中继续编辑也会保留较新的草稿。
+
+会话输入框下方的评审统计胶囊使用 Base UI Popover。点击显示当前会话的评审总数、自动放行率和各结局计数；点击外部、再次点击或 Escape 关闭。统计沿用现有轮询，切换会话会清除旧卡片，零评审时隐藏入口。
+
+统计卡片的点击、键盘、双语、主题和缩放定位已通过共享预览验证，记录在 `artifacts/base-ui-stats/preview-acceptance.json`。本轮临时 DSH 的安装与配置检查通过；空白测试会话不渲染 `conversation.composer.dock`，因此实际宿主中的统计弹层尚未验证。
+
+### 本次交付验证
+
+2026 年 11 月 13 日，基于 main `d6555c050b1cc23f42359aed05ba7e9b6dee99ce` 的最终功能源码通过 285 项工程测试、23 组共享预览检查和临时 DSH rc.2 的 10 组配置浏览器检查。安装包由两份冻结依赖的干净副本生成，归档字节一致；目录与归档均离线安装成功，通过 Node 24.22.2 探针及 264 项安装字节回归。完整的交付范围与限制见[验收摘要](evidence/base-ui/acceptance.json)和[安装包记录](evidence/base-ui/package-verification.json)。
+
+客户端从 main 的 57,134 B 增至 276,970 B；gzip 从 15,521 B 增至 90,722 B（增加 75,201 B）。[字节与体积记录](evidence/base-ui/final-bytes.json)包含客户端和最终归档的 SHA-256。依赖进入构建产物，安装目录不需要运行时下载依赖，继续使用宿主共享的 React 和 React DOM。
+
+以下截图仅含合成内容，分别采集对应交互；最终改动经用户确认，代码尚待独立审查：
+
+[配置控件](evidence/base-ui/config-controls.png) · [阈值与旗标](evidence/base-ui/threshold-flags.png) · [点击统计卡片](evidence/base-ui/review-stats.png) · [英文最小窗口](evidence/base-ui/review-stats-minimum.png)。
+
+初次接入的 24 组 HMR 与构建反例记录保留为历史证据，不视作最终字节的重复验收。实际宿主统计弹层、rc.1 浏览器、触屏、IME、屏幕阅读器、真实用户 profile 和模型调用仍未验证；本次提交不包含部署。
+
+## 原生控件原型（历史记录）
+
 状态：2026 年 11 月 12 日的评估原型，尚未正式采纳或部署。基于 main `ced2775cab757bef69a442b1d96b8276b3e84153`，全部开发、安装和构建在独立工作树 `5230/dsh-decision-review`。真实桌面 profile、主目录的链接安装产物和宿主源码不属于本次写入范围。
 
 原型交付版本为 `7423a1af48c9b1723f41739b0e297e48fd8750b6`。独立审查未发现规则编辑器的可行动业务缺陷，但发现三项验收脚本问题；本次仅修复这些问题并补充反例验证，等待独立复审。下文原型截图、依赖探针、体积和安装包记录保留原交付版本；修复后的验证范围见[验收脚本修复](#验收脚本修复)，不把自测通过视作审查关闭。
 
-## 推荐与选项
+### 推荐与选项
 
-**当前建议：继续使用 React 原生表单控件，把规则编辑器的样式集中到有插件前缀的 CSS。** 本轮原型就在宿主与预览共用的 `RulesEditor` 中实现，不另造展示副本。四个固定判定选项不需要自定义弹层；新增依赖尚不能带来足以抵消接入与升级成本的业务收益。这个判断针对当前规则表单，不排除以后按明确交互需求接入组件库。
+**原型当时建议：继续使用 React 原生表单控件，把规则编辑器的样式集中到有插件前缀的 CSS。** 本轮原型就在宿主与预览共用的 `RulesEditor` 中实现，不另造展示副本。四个固定判定选项不需要自定义弹层；新增依赖尚不能带来足以抵消接入与升级成本的业务收益。这个判断针对当前规则表单，不排除以后按明确交互需求接入组件库。
 
 | 组合 | 能解决的问题 | 本项目的代价与判断 |
 | --- | --- | --- |
-| 原生 React + 局部 CSS | 表单语义、浏览器键盘操作；自主控制卡片、间距、错误与焦点样式 | 无新依赖或编译阶段；原生下拉菜单外观受系统控制。当前推荐，已实现真实原型 |
+| 原生 React + 局部 CSS | 表单语义、浏览器键盘操作；自主控制卡片、间距、错误与焦点样式 | 无新依赖或编译阶段；原生下拉菜单外观受系统控制。原型当时推荐，已实现真实原型 |
 | Base UI + 局部 CSS | 无样式交互原语，自定义 Select、弹层定位与焦点管理 | 可与普通 CSS 单独使用；Select 依赖 React DOM，需改变本插件外部模块清单并重新验收。已做类型与构建探针，未接入宿主界面 |
 | 原生 React + Tailwind CSS | 统一工具类与样式编译约定 | 不替代交互组件或业务校验。需为生产 CSS 文本注入和 Bun HTML 预览提供同一编译结果；当前仅一个局部编辑器，收益不足以立即增加流程 |
 | shadcn/ui + Base UI 或 Radix + Tailwind CSS | 可直接修改的组件源码、样式与组合示例 | 是源码分发方式，底层交互和样式仍各有依赖；复制后升级、差异合并、宿主 token 映射归项目维护。暂不引入整套脚手架 |
 
 三者不是同一层面的替代品，也无需一起引入。[Base UI 样式指南](https://base-ui.com/react/handbook/styling)、[shadcn 源码分发说明](https://ui.shadcn.com/docs#distribution)、[Tailwind CLI](https://tailwindcss.com/docs/installation/tailwind-cli)。
 
-## 版本与集成边界
+### 版本与集成边界
 
 工程保持 React/React DOM `18.3.1`、React 类型 `18.3.31`、Node `>=24.9.0` 和固定 Bun revision `963452075e9d7e2a47a482f297143af5ed4f76c0`。未升级工具链、修改项目依赖或使用 `any` / `skipLibCheck` 掩盖不兼容。已安装 `/usr/local/bin/dsh` 实际为 `0.2.2-rc.2`；宿主验收从运行中的 boot graph 读取 build，不用本地宿主源码版本代替。
 
 [Base UI 1.9.0](https://base-ui.com/react/overview/releases) 的[版本 peer 声明](https://github.com/mui/base-ui/blob/v1.9.0/packages/react/package.json#L153-L170)包含 React、React DOM 和 React 类型 18。隔离探针已严格检查原生、带 Portal 和内联 Select 三个入口，全部通过。Base UI 本身不要求 Tailwind 或应用级主题 Provider；Select/Field 的组合部件依赖各自 Root 的局部 context，业务草稿与服务端校验仍归本项目。
 
-**构建阻碍来自插件当前契约，不是 DSH 没有 React DOM。** `scripts/build.ts` 只允许宿主共享 `react` 与 `react/jsx-runtime`，同时拒绝打入 React/React DOM。带 Portal 和去掉 Portal 的 Base UI Select 均被原样复制的生产构建器拒绝：后者仍通过定位、弹层状态和动画使用 React DOM。探针没有更改生产允许清单，也没有把第二份 React DOM 作为可安装方案。[Portal 源码](https://github.com/mui/base-ui/blob/v1.9.0/packages/react/src/floating-ui-react/components/FloatingPortal.tsx#L125-L130)、[定位调用链](https://github.com/mui/base-ui/blob/v1.9.0/packages/react/src/floating-ui-react/hooks/useFloating.ts#L1-L5)。
+**原型的构建阻碍来自插件当时的契约。** 当时 `scripts/build.ts` 只允许宿主共享 `react` 与 `react/jsx-runtime`，同时拒绝打入 React/React DOM。带 Portal 和去掉 Portal 的 Base UI Select 均被原样复制的生产构建器拒绝：后者仍通过定位、弹层状态和动画使用 React DOM。探针没有更改生产允许清单，也没有把第二份 React DOM 作为可安装方案。[Portal 源码](https://github.com/mui/base-ui/blob/v1.9.0/packages/react/src/floating-ui-react/components/FloatingPortal.tsx#L125-L130)、[定位调用链](https://github.com/mui/base-ui/blob/v1.9.0/packages/react/src/floating-ui-react/hooks/useFloating.ts#L1-L5)。
 
 官方 [DSH rc.1](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.1/packages/client/web/src/seed.ts#L26-L35) 与 [rc.2](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.2/packages/client/web/src/seed.ts#L26-L35) 源码已经提供共享 `react-dom`。未来可以评估只扩展插件允许清单、仍禁止打包 React/React DOM 的做法；这需要单独的契约决策和匹配宿主验收，本轮未实施。不能从这个源码事实推断 Base UI 的宿主渲染、焦点或弹层已通过。
 
 shadcn 的 [4.23.0 发布点](https://github.com/shadcn-ui/ui/releases/tag/shadcn%404.23.0)对应的 [Base Select](https://github.com/shadcn-ui/ui/blob/96da9cc/apps/v4/registry/bases/base/ui/select.tsx) 和 [Radix Select](https://github.com/shadcn-ui/ui/blob/96da9cc/apps/v4/registry/bases/radix/ui/select.tsx)都默认创建 Portal，包装层未暴露容器参数。官方 v4 组件更新面向 React 19，并移除了 `forwardRef`；React 18 项目不能只看 JSX 能编译，就认定复制的组件及 ref 调用兼容。需逐组件检查并适配。[shadcn v4 指南](https://ui.shadcn.com/docs/tailwind-v4)。本轮没有运行 shadcn 初始化器或声称全部组件不支持 React 18。
 
-## 样式、主题与弹层
+### 样式、主题与弹层
 
 原型仅调整规则区域，CSS 类和变量以 `decision-review-` 为前缀，映射现有 `--dsw-*` 色彩、圆角和焦点变量。没有全局 reset、`:root` 主题定义或独立 Provider。样式继续随插件启用注入、卸载移除；既有 Node probe 覆盖该生命周期。聚焦卡片使用整体表面与边框反馈，控件另有清晰的 `:focus-visible` 描边。
 
@@ -37,7 +67,7 @@ shadcn 的 [4.23.0 发布点](https://github.com/shadcn-ui/ui/releases/tag/shadc
 
 Base UI Select 默认 Portal 到 `body`，支持指定元素、ShadowRoot 或 ref 容器。React context 随 React 树传播，但 CSS 变量与祖先选择器依赖实际 DOM 祖先；局部主题容器、滚动裁切、叠层顺序与关闭后焦点都需实测。原型使用原生下拉框，不引入这些弹层路径。[Select Portal API](https://base-ui.com/react/components/select#portal)、[React createPortal](https://react.dev/reference/react-dom/createPortal)。
 
-## 原型行为与验证
+### 原型行为与验证
 
 原型保留原有增删、修改条件与判定结果、数量/字符限制、保存校验以及父表单草稿逻辑。当前业务没有单条规则启停或排序字段，本轮没有新增这些能力。多行条件不做 trim、分隔或重写。新增规则聚焦条件框；删除时聚焦下一条、上一条或空列表的添加按钮。规则按有序列表组织，标签、必填状态、字符计数与逐项错误保留可访问的关联。
 
@@ -53,7 +83,7 @@ Base UI Select 默认 Portal 到 `body`，支持指定元素、ShadowRoot 或 re
 
 工程检查（严格类型、lint、格式及 265 项测试）通过。安装包验收从两份干净副本构建，目录与归档的九个文件一致；空缓存离线安装、Node `24.22.2` 探针及 246 项安装字节回归通过。两次 tarball SHA-256 均为 `1e32c400616da62e68d08e0489fbb4b3353dc81f6c17e96d8a659ce8990b114c`，见 [安装包证据](evidence/ui-evaluation/package-verification.json)。
 
-## 验收脚本修复
+### 验收脚本修复
 
 三项修复及前后对照汇总于 [review-fixes.json](evidence/ui-evaluation/review-fixes.json)，其中记录了被验证脚本的 SHA-256、实际事件与时序观测。原始日志、反例脚本及完整浏览器 JSON 保留在本实施工作树的 `artifacts/ui-evaluation/review-fixes/`。
 
@@ -65,7 +95,7 @@ Base UI Select 默认 Portal 到 `body`，支持指定元素、ShadowRoot 或 re
 
 重新构建的客户端 SHA-256 仍为 `3751bcfad0ca69db590d319ca7b2faefdf0be6014db2eba150c99fe86b56d916`，与独立审查的原交付字节一致；本次没有修改产品源码、样式或依赖。既有客户端截图、Base UI 探针和完整本地包验证按上述交付版本复用，没有重复生成交付截图或重复运行无关探针。原生菜单方向键、IME、屏幕阅读器、真实用户 profile 和候选库真实接入的边界保持不变。
 
-## 体积与维护成本
+### 体积与维护成本
 
 测量使用固定 Bun、当前生产 CJS 包装和 gzip level 9，没有额外开启 minify。基线完整客户端为 **44,443 B / gzip 12,460 B**；原型为 **50,401 B / gzip 13,531 B**，增量 **5,958 B / gzip 1,071 B**。这是传输体积测量，不是加载速度或交互性能结论。项目运行时和开发依赖均没有增加，独立九文件安装包契约保留。
 
@@ -80,7 +110,7 @@ Base UI Select 默认 Portal 到 `body`，支持指定元素、ShadowRoot 或 re
 
 源码分发会减少开始时的样式编写，却不会免除后续维护。直接用 Base UI 时主要审查原语版本及交互回归；使用 shadcn 时还要合并本地组件源码差异；使用 Tailwind 时需要维护编译、扫描及预览热更新一致性。当前纯 CSS 由项目维护，增长后也应按实际重复整理。跨插件复用可以沿用既有业务组件/服务/宿主入口分离，本轮不提取共享工具包或 template。
 
-## 复现与后续实施
+### 复现与当时的实施建议
 
 ```sh
 bun install --frozen-lockfile
@@ -95,6 +125,6 @@ bun run verify:host --dsh /usr/local/bin/dsh --browser dist
 
 探针在专属临时目录冻结安装依赖并清理，不修改项目 lockfile。若存在 `artifacts/ui-evaluation/baseline/client.js`，它会同时测量该基线；没有该文件时明确输出 `null`，不伪造基线。基线可在当前工作树的 `artifacts/` 下从 `git archive ced2775` 解包、冻结安装和构建后取得，不能在真实客户端所链接的主目录重建。原生原型的字节数用 `dist/client.js` 与该基线按同一 gzip 参数比较。
 
-1. **本批交付审查**：审查局部原型和证据，确认是否采纳原生控件 + CSS；原型本身不代表正式选型。未合并、发布或部署。
+1. **原型交付审查**：审查局部原型和证据，确认是否采纳原生控件 + CSS；原型本身不代表正式选型。未合并、发布或部署。
 2. **后续按需求逐项接入**：若确认原生方案，先处理真正重复的表单/反馈样式，再评估整体界面；完整 i18n 和真实用户 profile 验收仍保持独立待办。
 3. **复杂交互出现时再评估 Base UI**：单独决定共享 React DOM 允许清单，选一个真实需要自定义弹层的控件，验证 Portal 容器、宿主主题、焦点与 Node/打包契约。shadcn 和 Tailwind 分别决定，不捆绑引入。至少两个插件证实复用需求后，再考虑提取共享层。

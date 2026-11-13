@@ -57,6 +57,7 @@ macOS 壳以 DSH `dsh-v0.2.2-rc.1`（`66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`�
 | `src/client/smoke-test.tsx`、`stats-pill.tsx` | 真实测试结果和统计展示 |
 | `src/client/api.ts` | 两个入口共用的 `ReviewApi` 与 HTTP/JSON 客户端，支持取消 |
 | `src/client/messages.ts`、`styles.ts`、`styles.css` | 两个入口共用的文案与业务样式 |
+| `src/client/ui/`、`scripts/build-ui-css.ts` | 共享 shadcn/ui 控件与同一份编译 CSS |
 | `preview/main.tsx`、`app.tsx` | 独立 React DOM 根、槽位选择和场景控制 |
 | `preview/canvas.tsx`、`host-preview.tsx` | 可调整的逻辑画布、静态 DSH 宿主壳及业务组件的挂载边界 |
 | `preview/http.ts`、`locale.ts`、`preview.css` | 场景控制请求、语言解析及代表性宿主主题变量注入 |
@@ -75,11 +76,11 @@ macOS 壳以 DSH `dsh-v0.2.2-rc.1`（`66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`�
 
 界面衍生值直接由 props、状态或请求结果计算，保存等用户动作由事件处理器发起。确实需要随挂载同步的加载、轮询或订阅可以使用 Effect，但应明确资源所有者、触发条件、取消和清理方式，并防止过期响应覆盖当前状态；不通过 Effect 将可直接计算的值回写为第二份状态。不引入零 Effect 门禁，也不为遵循文件模板拆分简单组件。
 
-当前规则表单使用原生 React 控件和插件作用域 CSS，保持宿主共享 React 与现有主题适配。重要交互先在共享预览中建立有代表性的正常、加载、错误或草稿场景，再按影响范围检查真实宿主；文案、间距等微调直接验证受影响场景。需要产品取舍时说明选项、影响和推荐，不为每次 UI 修改增加固定阶段审批。
+配置面板和规则编辑器使用本地维护的 shadcn/ui Base UI 控件与插件作用域 CSS，沿用宿主的 React、React DOM 和明暗主题。重要交互先在共享预览中建立有代表性的正常、加载、错误或草稿场景，再按影响范围检查真实宿主；文案、间距等微调直接验证受影响场景。需要产品取舍时说明选项、影响和推荐，不为每次 UI 修改增加固定阶段审批。
 
 产品文案包含错误、提示、placeholder、ARIA 名称、tooltip 和状态格式化文字。客户端文案归 `src/client/messages.ts`，服务端本地化裁决原因归 `src/server/review-outcome.ts`，插件元数据归 `assets/locale/`；修改时同步对应中英文键、占位符和语义，不向组件添加另一套兜底文案。用户输入、模型原文、代码和规则内容不是产品文案，保持原样，特别是规则的空白与换行；逻辑判断使用稳定标识，不匹配翻译后的显示文本。
 
-可见改动应按影响检查中英文、明暗主题、窄屏、长文本、键盘焦点和错误提示，并提供相应截图或交互证据。自动化未覆盖的原生菜单、IME 或屏幕阅读器行为应明确列为未验证，不能用可访问性属性或截图代替实际交互证据。
+可见改动应按影响检查中英文、明暗主题、窄屏、长文本、键盘焦点和错误提示，并提供相应截图或交互证据。自动化未覆盖的浏览器、触屏、IME 或屏幕阅读器行为应明确列为未验证，不能用可访问性属性或截图代替实际交互证据。
 
 ## 热更新的真实语义
 
@@ -89,8 +90,10 @@ macOS 壳以 DSH `dsh-v0.2.2-rc.1`（`66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`�
 | --- | --- |
 | `panel.tsx` 的展示 JSX | 立即更新；草稿保留，`performance.timeOrigin` 和页面导航计数不变 |
 | `src/client/styles.css` | 立即更新样式；草稿保留，不整页刷新 |
+| `src/client/ui/control-styles.css` 或控件的工具类 | Tailwind watcher 编译后，Bun 更新共享 CSS；生成文件不直接编辑 |
 | `preview/index.html` | 整页重载；草稿和场景控制回到初始值 |
 | 修改组件 Hook 顺序或组件身份 | Fast Refresh 可能重新挂载并丢失状态，应重新建立场景；不保证所有 TSX 编辑都保留状态 |
+| 为现有组件新增文案键 | 开着预览时先更新中英字典，再更新组件。若组件先热更新并读到旧字典，渲染失败可能使预览草稿丢失 |
 | 服务端、fixture、端口或依赖 | 停止并重启 `bun run dev`，再刷新浏览器；服务器源码不自动热重启 |
 
 [Fast Refresh 会重新运行 effects](https://reactnative.dev/docs/fast-refresh#fast-refresh-and-hooks)。配置加载按稳定 API 实例记住已加载状态，以免展示 JSX 更新时覆盖草稿；已在途的保存/测试会被清理并结束忙碌状态。真实宿主的取消是客户端取消，已经开始的服务端保存仍可能完成；预览销毁场景时还能取消其内存保存。需要确定状态时使用场景重置。
@@ -113,6 +116,6 @@ bun run verify:host --dsh /usr/local/bin/dsh artifacts/verification/local-decisi
 
 新增 `@types/bun` 与 `@types/react-dom` 均为开发依赖。`patches/bun-types@1.4.4.patch` 修正上游声明中四处与 Node 24 不匹配的类型引用：TextEncoder 返回值从真实方法签名取得，TLS 与 KeyObject 使用显式模块类型。固定 Bun、现有 Node 类型与第三方声明检查均保留；冻结安装会复现该补丁。
 
-生产包仍只有既有九个文件。CSS 作为文本嵌入 classic ModuleLoader 客户端，在宿主启用/卸载时安装/移除；React 由宿主共享。构建元数据拒绝预览源码和打包进客户端的 React/React DOM。预览服务器、fixtures、浏览器驱动、类型补丁及开发依赖都不会随插件安装。
+生产包在既有文件之外附带客户端依赖许可。共享 CSS 作为文本嵌入 classic ModuleLoader 客户端，在宿主启用/卸载时安装/移除；React 与 React DOM 由宿主共享。每个已挂载表单拥有自己的 Select Portal 容器，菜单继承同一主题及缩放，离开该表单时随之移除。构建元数据拒绝预览源码和打包进客户端的 React/React DOM。预览服务器、fixtures、浏览器驱动、类型补丁及开发依赖都不会随插件安装。
 
-可复用经验目前限于「业务组件 + 类型化服务 + 宿主/预览入口」这一明确边界。共享工具包、第二插件接入、UI 库、完整 i18n 改写、GitHub template 和脚手架 CLI 均未实现。
+可复用经验目前限于「业务组件 + 类型化服务 + 宿主/预览入口」这一明确边界。共享工具包、第二插件接入、完整 i18n 改写、GitHub template 和脚手架 CLI 均未实现。

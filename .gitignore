@@ -25,3 +25,4 @@ coverage/
 # Generated build and package outputs
 dist/
 artifacts/
+/src/client/ui/control-styles.generated.css

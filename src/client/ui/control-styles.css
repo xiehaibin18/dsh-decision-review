@@ -1,0 +1,7 @@
+/* Prefix declared by the empty theme; host tokens and all theme values stay in the panel. */
+@import 'tailwindcss/utilities.css' layer(decision-review-utilities) source(none) prefix(dr);
+@source './*.tsx';
+
+@theme prefix(dr) {
+  --*: initial;
+}

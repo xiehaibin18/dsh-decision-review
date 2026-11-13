@@ -27,6 +27,7 @@ const keep = process.argv.includes('--keep')
 const bun = process.execPath
 const expected = [
   'LICENSE.upstream',
+  'LICENSE.client',
   'README.md',
   'package.json',
   'index.js',
