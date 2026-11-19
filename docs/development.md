@@ -36,6 +36,8 @@ bun install --frozen-lockfile
 
 服务器和客户端分别进行严格类型检查，构建与打包脚本使用 Node API；独立预览服务使用 Bun API，单独进行严格类型检查。宿主类型来自固定版本的官方 npm 包；其声明引用的一些可选依赖也作为开发依赖显式安装。Bun 使用 hoisted 布局，TypeScript 保留包的符号链接解析路径，以便这些声明找到依赖。没有关闭第三方声明检查，也没有把宿主服务替换为自造类型。客户端额外声明了上游类型文件引用的 KaTeX CSS 副作用资源。
 
+开发依赖 [dsh-plugin-dev](https://github.com/xiehaibin18/dsh-plugin-dev) 提供 Bun 预览服务器、语言和主题控件，以及构建后的运行时导入检查。`package.json` 使用完整 GitHub 提交 SHA 固定源码版本。更新时同步提交 `bun.lock`，并按安装包验收验证生产产物。
+
 服务端构建目标明确为 Node ESM，产物仅保留 Node 内置模块导入。客户端输出 CJS 后包装为 DSH 的 `window.__ModuleLoader__.load` 工厂：只从宿主共享模块表取用 `react`、`react/jsx-runtime` 和 `react-dom`。Base UI 与样式辅助库进入客户端生产包，宿主类型包只用于编译，Tailwind 只用于生成 CSS。构建检查输入元数据和最终 JavaScript 导入，防止打入第二份 React 或留下未声明的运行时导入。产物不包含源码映射、本机绝对路径或开发服务器地址。
 
 ## 维护约定

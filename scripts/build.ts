@@ -1,3 +1,4 @@
+import { assertRuntimeImports, HOST_CLIENT_MODULES } from '@xiehaibin18/dsh-plugin-dev/build'
 import { execFileSync } from 'node:child_process'
 import { copyFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -8,8 +9,6 @@ import { assertScopedStylesheet } from './check-stylesheet.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const staging = await mkdtemp(join(tmpdir(), 'decision-review-build-'))
-// React is owned by the host's ModuleLoader. Other library imports are bundled.
-const sharedClientModules = ['react', 'react/jsx-runtime', 'react-dom']
 const manifest = {
   name: sourceManifest.name,
   version: sourceManifest.version,
@@ -54,7 +53,7 @@ async function bundle(target: 'server' | 'client') {
       `--format=${target === 'server' ? 'esm' : 'cjs'}`,
       `--outfile=${output}`,
       `--metafile=${metafile}`,
-      ...(target === 'client' ? ['--production', ...sharedClientModules.map((name) => `--external=${name}`)] : []),
+      ...(target === 'client' ? ['--production', ...HOST_CLIENT_MODULES.map((name) => `--external=${name}`)] : []),
     ],
     { cwd: root, stdio: 'inherit' },
   )
@@ -63,17 +62,15 @@ async function bundle(target: 'server' | 'client') {
   if (Object.keys(metadata.outputs).length !== 1) throw new Error(`Expected one ${target} JavaScript bundle`)
   for (const filename of Object.keys(metadata.inputs)) {
     if (/(^|\/)preview\//.test(filename)) throw new Error(`Preview source entered the ${target} bundle: ${filename}`)
+    if (/(^|\/)node_modules\/@xiehaibin18\/dsh-plugin-dev\//.test(filename)) {
+      throw new Error(`Shared development source entered the ${target} bundle: ${filename}`)
+    }
     if (target === 'client' && /node_modules\/(react|react-dom)(\/|$)/.test(filename)) {
       throw new Error(`Client must use the host React instance: ${filename}`)
     }
   }
   const text = await readFile(output, 'utf8')
-  // Inspect emitted runtime imports: Bun also marks some tree-shaken re-exports as external in input metadata.
-  for (const dependency of new Bun.Transpiler({ loader: 'js' }).scanImports(text)) {
-    const allowed =
-      target === 'server' ? dependency.path.startsWith('node:') : sharedClientModules.includes(dependency.path)
-    if (!allowed) throw new Error(`Unexpected ${target} runtime dependency: ${dependency.path}`)
-  }
+  assertRuntimeImports(text, target)
   return text
 }
 

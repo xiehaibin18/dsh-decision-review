@@ -1,3 +1,4 @@
+import type { PreviewLanguage } from '@xiehaibin18/dsh-plugin-dev/appearance'
 import { useState } from 'react'
 import enMetadata from '../assets/locale/en.json'
 import zhMetadata from '../assets/locale/zh.json'
@@ -5,7 +6,6 @@ import { ConfigPanel } from '../src/client/panel.js'
 import { ApprovalStatsPill } from '../src/client/stats-pill.js'
 import type { ActiveSession } from './http.js'
 import { previewLocale } from './locale.js'
-import type { PreviewLanguage } from './scenes.js'
 
 export const CONFIG_SLOT = 'plugins.row.config'
 export const STATS_SLOT = 'conversation.composer.dock'

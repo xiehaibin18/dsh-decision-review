@@ -1,8 +1,13 @@
+import {
+  PreviewAppearanceControls,
+  type PreviewLanguage,
+  type PreviewTheme,
+} from '@xiehaibin18/dsh-plugin-dev/appearance'
 import { useEffect, useRef, useState } from 'react'
 import { PreviewCanvas } from './canvas.js'
 import { CONFIG_SLOT, STATS_SLOT, HostPreview, type PreviewSlot } from './host-preview.js'
 import { createSession, deleteSession, recoverSession, type ActiveSession } from './http.js'
-import { SCENES, type SceneId, type PreviewLanguage, type PreviewTheme } from './scenes.js'
+import { SCENES, type SceneId } from './scenes.js'
 
 export function PreviewApp({ initialSession }: { initialSession: ActiveSession }) {
   const [session, setSession] = useState<ActiveSession | null>(initialSession)
@@ -82,20 +87,12 @@ export function PreviewApp({ initialSession }: { initialSession: ActiveSession }
               <option value={STATS_SLOT}>会话输入框 · 统计栏</option>
             </select>
           </label>
-          <label>
-            界面语言
-            <select value={language} onChange={(event) => setLanguage(event.target.value as PreviewLanguage)}>
-              <option value="zh">中文</option>
-              <option value="en">English</option>
-            </select>
-          </label>
-          <label>
-            主题
-            <select value={theme} onChange={(event) => setTheme(event.target.value as PreviewTheme)}>
-              <option value="light">浅色</option>
-              <option value="dark">深色</option>
-            </select>
-          </label>
+          <PreviewAppearanceControls
+            language={language}
+            theme={theme}
+            onLanguageChange={setLanguage}
+            onThemeChange={setTheme}
+          />
           <label>
             预览场景
             <select value={scene} onChange={(event) => void switchScene(event.target.value as SceneId)}>
