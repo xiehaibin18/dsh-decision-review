@@ -118,4 +118,4 @@ bun run verify:host --dsh /usr/local/bin/dsh artifacts/verification/local-decisi
 
 生产包在既有文件之外附带客户端依赖许可。共享 CSS 作为文本嵌入 classic ModuleLoader 客户端，在宿主启用/卸载时安装/移除；React 与 React DOM 由宿主共享。每个已挂载表单拥有自己的 Select Portal 容器，菜单继承同一主题及缩放，离开该表单时随之移除。构建元数据拒绝预览源码和打包进客户端的 React/React DOM。预览服务器、fixtures、浏览器驱动、类型补丁及开发依赖都不会随插件安装。
 
-可复用经验目前限于「业务组件 + 类型化服务 + 宿主/预览入口」这一明确边界。共享工具包、第二插件接入、完整 i18n 改写、GitHub template 和脚手架 CLI 均未实现。
+Decision Review 的预览服务器和语言、主题控件来自共享开发包。[Tool Explorer fork 的预览分支](https://github.com/xiehaibin18/dsh-tool-explorer/tree/f67b994c51275b24dced5cbf61d5d880e5af5495/preview) 也接入了同一版本。Decision Review 的配置页、统计栏和模拟场景由本仓库维护。开发包的版本固定和更新方式见[开发指引](development.md)。新插件可从 [GitHub 模板](https://github.com/xiehaibin18/dsh-plugin-template) 创建。

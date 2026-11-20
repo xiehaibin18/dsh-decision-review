@@ -80,6 +80,7 @@
     "@types/node": "24.19.2",
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7",
+    "@xiehaibin18/dsh-plugin-dev": "github:xiehaibin18/dsh-plugin-dev#42580c49f7da2cb627b921eb5970055bbf4dab80",
     "jsdom": "29.1.1",
     "lexical": "0.49.0",
     "react": "18.3.1",

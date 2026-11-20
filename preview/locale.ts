@@ -1,5 +1,5 @@
+import type { PreviewLanguage } from '@xiehaibin18/dsh-plugin-dev/appearance'
 import { MESSAGES, type ResolveText, type Translate } from '../src/client/messages.js'
-import type { PreviewLanguage } from './scenes.js'
 
 export function previewLocale(language: PreviewLanguage): { t: Translate; resolveText: ResolveText } {
   return {
