@@ -1,12 +1,12 @@
 # 开发与安装
 
-工程使用固定 Bun canary 构建；安装后的插件由 DSH 的 Node 宿主运行。当前支持 DSH `0.2.2-rc.1`、`0.2.2-rc.2`、`0.2.2-rc.3` 和 `0.2.2-rc.5`，要求 Node `>=24.9.0`，客户端使用宿主的 React 18 共享实例。开发依赖仍使用 `rc.1` 的类型声明。
+工程使用 Bun `>=1.4.4-canary.1` 构建；安装后的插件由 DSH 的 Node 宿主运行。当前支持 DSH `0.2.2-rc.1`、`0.2.2-rc.2`、`0.2.2-rc.3` 和 `0.2.2-rc.5`，要求 Node `>=24.9.0`，客户端使用宿主的 React 18 共享实例。开发依赖仍使用 `rc.1` 的类型声明。
 
-## 固定工具链
+## 工具链要求
 
-本阶段确认使用 Bun 的原生 `fmt`、`check` 和 `lint`。所选二进制为 `1.4.4-canary.1`，完整修订为 `963452075e9d7e2a47a482f297143af5ed4f76c0`。`bun --version` 只显示 `1.4.4`，不足以区分它与没有原生 lint 的稳定版。
+本阶段使用 Bun 的原生 `fmt`、`check` 和 `lint`，最低要求为 `1.4.4-canary.1`（工具链检查按 SemVer 比较完整版本，允许任意 `>=1.4.4-canary.1` 的更新 canary 或正式版）。
 
-官方 npm 分发标签为 `bun@1.4.3-canary.20261021.1`；它安装的二进制正是上述修订。因此 `packageManager` 固定 npm 标签，项目的工具链检查同时核对实际二进制。可以安装到独立目录，不替换全局 Bun：
+CI 与可复现基线使用官方 npm 分发标签 `bun@1.4.3-canary.20261021.1`（对应二进制 `1.4.4-canary.1+963452075`）。本地若版本低于最低要求，或希望隔离安装基线版本而不替换全局 Bun，可按如下方式安装：
 
 ```sh
 mkdir -p "$HOME/.local/share/decision-review-toolchain"
@@ -17,7 +17,7 @@ bun run toolchain:check
 bun install --frozen-lockfile
 ```
 
-这里的 npm 仅用于安装固定工具链。项目依赖使用 Bun 与提交的 `bun.lock` 管理；不要使用会漂移的 `bun upgrade --canary`。已核验 macOS arm64 分发包的官方完整性信息，并确认它与本机二进制逐字节一致；Linux x64 的同 revision 分发包也已核验，GitHub Actions 会验证其实际功能。[固定分发版本](https://www.npmjs.com/package/bun/v/1.4.3-canary.20261021.1) · [Bun 原生 lint](https://bun.com/docs/lint)
+这里的 npm 仅用于按需安装基线工具链；项目依赖使用 Bun 与提交的 `bun.lock` 管理。[基线分发版本](https://www.npmjs.com/package/bun/v/1.4.3-canary.20261021.1) · [Bun 原生 lint](https://bun.com/docs/lint)
 
 ## 源码与产物
 
