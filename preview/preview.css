@@ -469,6 +469,12 @@ body {
   font-size: 12px;
 }
 
+.preview-stats-dock > .preview-context {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @container preview-window (width < 1024px) {
   .preview-host {
     grid-template-columns: minmax(0, 1fr);

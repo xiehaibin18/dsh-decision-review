@@ -508,6 +508,12 @@
   flex: none;
 }
 
+.decision-review-stats-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .decision-review-stats .decision-review-popover-positioner {
   z-index: 10;
 }
