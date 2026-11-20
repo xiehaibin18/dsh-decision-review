@@ -7,10 +7,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PluginConfigViewProps } from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { createElement as h } from 'react'
+import type { UseSessionStatus } from '@deepseek-ai/dsh-client-ui-session/client'
+import { Fragment, createElement as h } from 'react'
 import { createReviewApi } from './api.js'
 import { MESSAGES, NS, type ResolveText, type Translate } from './messages.js'
 import { ConfigPanel } from './panel.js'
+import { PendingApprovalHost } from './pending-approval-card.js'
 import { ApprovalStatsPill } from './stats-pill.js'
 import css from './styles.css' with { type: 'text' }
 import { NOTE } from './styles.js'
@@ -36,8 +38,21 @@ export function apply(ctx: Context): () => void {
   ctx.slots.inject('conversation.composer.dock', function () {
     return ctx.slots.register(
       { name: 'conversation.composer.dock', id: 'decision-review-approvals', order: 2, locale: NS },
-      function ComposerStats({ t, sessionId }) {
-        return h(ApprovalStatsPill, { t, sessionId, api })
+      function ComposerStats({
+        t,
+        sessionId,
+        useSessionStatus,
+      }: {
+        t: Translate
+        sessionId?: string
+        useSessionStatus?: UseSessionStatus
+      }) {
+        return h(
+          Fragment,
+          null,
+          h(ApprovalStatsPill, { t, sessionId, api }),
+          useSessionStatus ? h(SessionApprovalBridge, { t, resolveText, sessionId, api, useSessionStatus }) : null,
+        )
       },
     )
   })
@@ -50,4 +65,27 @@ export function apply(ctx: Context): () => void {
     style.remove()
     disposeLocale()
   }
+}
+
+function SessionApprovalBridge({
+  t,
+  resolveText,
+  sessionId,
+  api,
+  useSessionStatus,
+}: {
+  t: Translate
+  resolveText: ResolveText
+  sessionId?: string
+  api: ReturnType<typeof createReviewApi>
+  useSessionStatus: UseSessionStatus
+}) {
+  const interaction = useSessionStatus((snapshot) =>
+    sessionId ? snapshot.get(sessionId as never)?.pendingInteraction : undefined,
+  )
+  const isApproval = interaction?.kind === 'approval'
+  const rawCallId = isApproval ? (interaction as { callId?: unknown }).callId : undefined
+  const pendingApprovalKey = isApproval ? interaction.key : undefined
+  const pendingCallId = typeof rawCallId === 'string' && rawCallId !== '' ? rawCallId : undefined
+  return h(PendingApprovalHost, { t, resolveText, sessionId, api, pendingApprovalKey, pendingCallId })
 }

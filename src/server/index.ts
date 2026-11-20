@@ -10,6 +10,7 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { decisionsClassifyRisk } from './decisions-engine.js'
+import { buildPendingReview, createPendingReviewStore } from './pending-store.js'
 import { AUTO_PRESENTATION, askUser, denied, failed, settingsInvalidDecision } from './review-outcome.js'
 import { guarded, reviewRoutes } from './routes.js'
 import { sessionClassifyRisk } from './session-engine.js'
@@ -62,6 +63,7 @@ export function apply(ctx: Context): void {
   const profileDirectory = resolveProfileDir(ctx)
   const settingsPath = `${profileDirectory}/${SETTINGS_FILE}`
   const trail = createReviewTrail(profileDirectory)
+  const pendingStore = createPendingReviewStore()
   // `problems` lists stored values that had to be replaced; while it is not
   // empty, review is stopped and calls that need it are denied (see the pre-execute listener).
   const holder = loadSettings(settingsPath)
@@ -70,7 +72,14 @@ export function apply(ctx: Context): void {
   const lifecycle = new AbortController()
   const shownBySession = new WeakMap<Session, ShownSchemas>()
 
-  const routes = reviewRoutes(settingsPath, holder, trail, () => ({ accepting, active: active.size }), lifecycle)
+  const routes = reviewRoutes(
+    settingsPath,
+    holder,
+    trail,
+    () => ({ accepting, active: active.size }),
+    lifecycle,
+    pendingStore,
+  )
 
   ctx.effect(function* () {
     const stopListener = ctx.on(
@@ -177,6 +186,12 @@ export function apply(ctx: Context): void {
             return downstream
           }
           record('ask')
+          if (!exec.signal.aborted) {
+            pendingStore.stage(agent.session.id, buildPendingReview(exec, decision, telemetry.answers, settings))
+            exec.signal.addEventListener('abort', () => pendingStore.clear(agent.session.id, exec.callId), {
+              once: true,
+            })
+          }
           return askUser(exec, decision)
         } finally {
           active.delete(completed.promise)
@@ -210,19 +225,44 @@ export function apply(ctx: Context): void {
       { prepend: true },
     )
 
-    // Observe the approval waterfall without answering: each settled ask
-    // feeds the per-session approval stats served to the composer dock chip.
-    yield ctx.on('approval/request', async (req, next) => {
-      const outcome = await next()
-      trail.record({
-        event: 'approval',
-        session: String(req.agent.session.id).replace(/^session-/, ''),
-        tool: req.toolName,
-        callId: req.callId,
-        outcome,
-      })
-      return outcome
+    // Drop any staged review if the call finishes without entering `approval/request`
+    // (for example, when the host's effective approval policy is `never`).
+    yield ctx.on('tools/result', (exec) => {
+      if (exec.agent) pendingStore.clear(exec.agent.session.id, exec.callId)
     })
+
+    // Prepend ahead of host/remote approval answerers so a staged review is
+    // published only while the host is actually awaiting approval, withdrawn
+    // immediately when approval settles or aborts, and every settled ask feeds stats.
+    yield ctx.on(
+      'approval/request',
+      async (req, next) => {
+        const callId = req.callId
+        let clearPending: (() => void) | undefined
+        if (callId !== undefined) {
+          clearPending = () => pendingStore.clear(req.agent.session.id, callId)
+          pendingStore.activate(req.agent.session.id, callId)
+          req.signal?.addEventListener('abort', clearPending, { once: true })
+        }
+        try {
+          const outcome = await next()
+          trail.record({
+            event: 'approval',
+            session: String(req.agent.session.id).replace(/^session-/, ''),
+            tool: req.toolName,
+            callId: req.callId,
+            outcome,
+          })
+          return outcome
+        } finally {
+          if (clearPending !== undefined) {
+            req.signal?.removeEventListener('abort', clearPending)
+            clearPending()
+          }
+        }
+      },
+      { prepend: true },
+    )
 
     yield async () => {
       accepting = false
@@ -235,6 +275,7 @@ export function apply(ctx: Context): void {
           }
         }
       } finally {
+        pendingStore.clearAll()
         lifecycle.abort(new Error('decision-review integration disposed'))
         await Promise.allSettled([...active])
       }

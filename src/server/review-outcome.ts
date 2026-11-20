@@ -1,5 +1,11 @@
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
-import type { DenialExplanation, PredicateName, ReviewDecision } from '../shared/contracts.js'
+import {
+  formatVisibleWorkdir,
+  type DenialExplanation,
+  type PendingActionSummary,
+  type PredicateName,
+  type ReviewDecision,
+} from '../shared/contracts.js'
 import { isRecord } from './json.js'
 
 type Locale = 'en' | 'zh'
@@ -56,14 +62,24 @@ const APPROVAL_TEXT = {
     fallback: 'the reviewer did not approve this call',
     headline: (body: string) => `Decision Review requests your approval: ${body}`,
     pending: (call: string) => `Pending call: ${call}`,
+    workdir: (dir: string) => `Working directory: ${dir}`,
     length: (length: number) => ` (${length} characters)`,
+    editSummary: (oldLen: number, newLen: number, replaceAll: boolean) => {
+      const scope = replaceAll ? ', replace all matches' : ''
+      return newLen === 0 ? ` (delete ${oldLen} characters${scope})` : ` (${oldLen} → ${newLen} characters${scope})`
+    },
     truncated: (length: number) => `… (${length} more characters)`,
   },
   zh: {
     fallback: '评审未放行此调用',
     headline: (body: string) => `决策评审请你决定是否放行：${body}`,
     pending: (call: string) => `待评审的调用：${call}`,
+    workdir: (dir: string) => `工作目录：${dir}`,
     length: (length: number) => `（${length} 个字符）`,
+    editSummary: (oldLen: number, newLen: number, replaceAll: boolean) => {
+      const scope = replaceAll ? '，替换全部匹配' : ''
+      return newLen === 0 ? `（删除 ${oldLen} 个字符${scope}）` : `（${oldLen} → ${newLen} 个字符${scope}）`
+    },
     truncated: (length: number) => `…（另有 ${length} 个字符）`,
   },
 }
@@ -161,8 +177,69 @@ export function denied(exec: ToolExecution, reason?: string): PreToolDecision {
   }
 }
 
+const PENDING_DETAIL_MAX = 1200
+
+function explicitWorkdir(fields: Record<string, unknown>): string | undefined {
+  return typeof fields.workdir === 'string' && fields.workdir.length > 0 ? fields.workdir : undefined
+}
+
+/** Extract a structured, display-safe summary of the pending tool action for UI cards. */
+export function summarizePendingAction(exec: ToolExecution): PendingActionSummary {
+  const args = exec.arguments && typeof exec.arguments === 'object' ? exec.arguments : {}
+  const fields = isRecord(args) ? args : {}
+  const clip = (value: string) => (value.length > PENDING_DETAIL_MAX ? `${value.slice(0, PENDING_DETAIL_MAX)}…` : value)
+  const name = exec.name
+
+  if (name === 'bash' && typeof fields.command === 'string') {
+    const workdir = explicitWorkdir(fields)
+    return {
+      kind: 'command',
+      ...(workdir === undefined ? {} : { workdir: clip(workdir) }),
+      detail: clip(fields.command),
+    }
+  }
+  if (name === 'write') {
+    const target = String(fields.file_path ?? fields.path ?? '?')
+    const content = typeof fields.content === 'string' ? fields.content : undefined
+    return {
+      kind: 'file',
+      target,
+      ...(content === undefined ? {} : { detail: clip(content), meta: { chars: content.length } }),
+    }
+  }
+  if (name === 'edit') {
+    const target = String(fields.file_path ?? fields.path ?? '?')
+    const oldText = typeof fields.old_string === 'string' ? fields.old_string : undefined
+    const newText = typeof fields.new_string === 'string' ? fields.new_string : undefined
+    const replaceAll = fields.replace_all === true
+    return {
+      kind: 'file',
+      target,
+      edit: {
+        ...(oldText === undefined ? {} : { oldText: clip(oldText), oldChars: oldText.length }),
+        ...(newText === undefined ? {} : { newText: clip(newText), newChars: newText.length }),
+        replaceAll,
+      },
+    }
+  }
+  if (name === 'web_fetch' && typeof fields.url === 'string') {
+    return { kind: 'url', target: clip(fields.url) }
+  }
+  if (name === 'web_search' && Array.isArray(fields.queries)) {
+    return { kind: 'search', detail: clip(fields.queries.join(' | ')) }
+  }
+  if (name.startsWith('mcp__')) {
+    const parts = name.split('__')
+    const target = `${parts[1] ?? '?'}/${parts.slice(2).join('__')}`
+    const rendered = JSON.stringify(args, null, 2)
+    return { kind: 'mcp', target, ...(rendered && rendered !== '{}' ? { detail: clip(rendered) } : {}) }
+  }
+  const rendered = JSON.stringify(args, null, 2)
+  return { kind: 'tool', target: name, ...(rendered && rendered !== '{}' ? { detail: clip(rendered) } : {}) }
+}
+
 /** Compact localized pending-call line for tools whose card detail the Chat
- * approval slot cannot draw (it renders only bash command arguments). */
+ * approval slot cannot draw (it renders only top-level bash command arguments). */
 function describePendingLine(exec: ToolExecution, locale: Locale): string {
   const args = exec.arguments && typeof exec.arguments === 'object' ? exec.arguments : {}
   const fields = isRecord(args) ? args : {}
@@ -170,10 +247,26 @@ function describePendingLine(exec: ToolExecution, locale: Locale): string {
   const truncate = (value: string) =>
     value.length > 200 ? value.slice(0, 200) + copy.truncated(value.length - 200) : value
   const name = exec.name
-  if (name === 'bash' && typeof fields.command === 'string') return '' // the card draws the command itself
-  if (name === 'write' || name === 'edit') {
+  // Top-level bash commands are rendered natively by the Chat approval slot,
+  // but that slot ignores `workdir` and does not render PTC inner bash calls.
+  if (name === 'bash' && typeof fields.command === 'string') {
+    const workdir = explicitWorkdir(fields)
+    const lines: string[] = []
+    if (exec.parent !== undefined) lines.push(copy.pending(`bash ${truncate(fields.command)}`))
+    if (workdir !== undefined) lines.push(copy.workdir(truncate(formatVisibleWorkdir(workdir))))
+    return lines.join('\n')
+  }
+  if (name === 'write') {
     const size = typeof fields.content === 'string' ? copy.length(fields.content.length) : ''
     return copy.pending(`${name} ${fields.file_path ?? fields.path ?? '?'}${size}`)
+  }
+  if (name === 'edit') {
+    const target = String(fields.file_path ?? fields.path ?? '?')
+    const oldLen = typeof fields.old_string === 'string' ? fields.old_string.length : undefined
+    const newLen = typeof fields.new_string === 'string' ? fields.new_string.length : undefined
+    const summary =
+      oldLen !== undefined && newLen !== undefined ? copy.editSummary(oldLen, newLen, fields.replace_all === true) : ''
+    return copy.pending(`edit ${target}${summary}`)
   }
   if (name === 'web_fetch' && typeof fields.url === 'string') return copy.pending(`web_fetch ${truncate(fields.url)}`)
   if (name === 'web_search' && Array.isArray(fields.queries))

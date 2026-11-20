@@ -3,19 +3,27 @@ import { useState } from 'react'
 import enMetadata from '../assets/locale/en.json'
 import zhMetadata from '../assets/locale/zh.json'
 import { ConfigPanel } from '../src/client/panel.js'
+import { PendingApprovalHost } from '../src/client/pending-approval-card.js'
 import { ApprovalStatsPill } from '../src/client/stats-pill.js'
+import { approvalCaseCallId, type ApprovalCaseId } from './fixtures.js'
 import type { ActiveSession } from './http.js'
 import { previewLocale } from './locale.js'
 
 export const CONFIG_SLOT = 'plugins.row.config'
 export const STATS_SLOT = 'conversation.composer.dock'
-export type PreviewSlot = typeof CONFIG_SLOT | typeof STATS_SLOT
+export const APPROVAL_SLOT = 'conversation.approval.context'
+export type PreviewSlot = typeof CONFIG_SLOT | typeof STATS_SLOT | typeof APPROVAL_SLOT
 
 const HOST_TEXT = {
   zh: {
     plugins: '插件',
     config: '插件配置',
     stats: '会话统计',
+    approval: '等待人工审批',
+    approvalTitle: '需要你的审批',
+    approvalDesc: '宿主官方审批卡片（负责允许 / 拒绝操作）',
+    allowOnce: '仅本次允许',
+    reject: '拒绝',
     switching: '正在切换场景…',
     newSession: '新会话',
     search: '搜索',
@@ -35,6 +43,11 @@ const HOST_TEXT = {
     plugins: 'Plugins',
     config: 'Plugin configuration',
     stats: 'Session statistics',
+    approval: 'Pending approval',
+    approvalTitle: 'Approval required',
+    approvalDesc: 'Host approval card (handles Allow / Reject actions)',
+    allowOnce: 'Allow once',
+    reject: 'Reject',
     switching: 'Switching scenes…',
     newSession: 'New session',
     search: 'Search',
@@ -57,11 +70,13 @@ export function HostPreview({
   session,
   language,
   reload,
+  approvalCase = 'security',
 }: {
   slot: PreviewSlot
   session: ActiveSession | null
   language: PreviewLanguage
   reload: number
+  approvalCase?: ApprovalCaseId
 }) {
   const text = HOST_TEXT[language]
   const configVisible = slot === CONFIG_SLOT
@@ -110,7 +125,10 @@ export function HostPreview({
         </div>
       </div>
       <PluginDetail key={session?.id} visible={configVisible} session={session} language={language} reload={reload} />
-      {!configVisible && <Conversation session={session} language={language} />}
+      {slot === STATS_SLOT && <Conversation session={session} language={language} />}
+      {slot === APPROVAL_SLOT && (
+        <ConversationApproval session={session} language={language} approvalCase={approvalCase} />
+      )}
     </div>
   )
 }
@@ -194,6 +212,59 @@ function Conversation({ session, language }: { session: ActiveSession | null; la
             <span role="status">{text.switching}</span>
           )}
         </section>
+      </div>
+    </section>
+  )
+}
+
+function ConversationApproval({
+  session,
+  language,
+  approvalCase,
+}: {
+  session: ActiveSession | null
+  language: PreviewLanguage
+  approvalCase: ApprovalCaseId
+}) {
+  const text = HOST_TEXT[language]
+  const { t, resolveText } = previewLocale(language)
+
+  return (
+    <section className="preview-conversation" aria-label={text.approval}>
+      <div className="preview-conversation-header preview-context" aria-hidden="true">
+        <span>{text.chat}</span>
+        <span>···</span>
+      </div>
+      <div className="preview-transcript">
+        <div className="preview-messages preview-context" aria-hidden="true">
+          <p className="preview-user-message">{text.prompt}</p>
+          <p className="preview-agent-message">{text.answer}</p>
+          <p className="preview-user-message">{text.followUp}</p>
+        </div>
+      </div>
+      <div className="preview-composer-seat" data-composer-seat="">
+        <div style={{ display: 'none' }}>
+          {session && (
+            <PendingApprovalHost
+              t={t}
+              resolveText={resolveText}
+              sessionId={approvalCase}
+              api={session.api}
+              pendingApprovalKey={`preview-approval-${approvalCase}`}
+              pendingCallId={approvalCaseCallId(approvalCase)}
+            />
+          )}
+        </div>
+        <div className="preview-official-approval preview-context" aria-hidden="true" data-approval-key="preview">
+          <div className="preview-official-approval-head">
+            <strong>{text.approvalTitle}</strong>
+            <span>{text.approvalDesc}</span>
+          </div>
+          <div className="preview-official-approval-actions">
+            <span className="preview-official-btn-primary">{text.allowOnce}</span>
+            <span className="preview-official-btn">{text.reject}</span>
+          </div>
+        </div>
       </div>
     </section>
   )

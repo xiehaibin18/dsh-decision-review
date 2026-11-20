@@ -19,7 +19,7 @@ import { settingsIssueText, type ResolveText, type Translate } from './messages.
 import { RulesEditor } from './rules-editor.js'
 import { draftRules, ruleData, validateRules, type DraftRule, type RuleChanges } from './rules.js'
 import { SmokeTest } from './smoke-test.js'
-import { ACTION_BAR, CARD, DANGER, ERROR_NOTE, HEADING, NOTE } from './styles.js'
+import { NOTE } from './styles.js'
 import { ThresholdEditor } from './threshold-editor.js'
 import { formatTimeoutSeconds, parseTimeoutSeconds, TIMEOUT_SECONDS_RANGE } from './timeout.js'
 import { Button } from './ui/button.js'
@@ -130,6 +130,7 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
   const keyStatus = clearKey ? t('apikey.clear.pending') : settings.hasApiKey ? t('apikey.saved') : ''
   const { runtime } = initialConfig
   const runtimeState = !runtime ? 'runtime.pending' : runtime.accepting ? 'runtime.accepting' : 'runtime.closed'
+  const statusKind = problems.length ? 'paused' : !runtime ? 'pending' : runtime.accepting ? 'accepting' : 'closed'
   // Both config and save return the current problems. Runtime is a load-time snapshot.
   const status = t(problems.length ? 'runtime.paused' : runtimeState)
 
@@ -276,24 +277,32 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
   return (
     <div className="decision-review-panel">
       <div className="decision-review-overlays" ref={setPopupContainer} />
-      <div style={{ display: 'grid', gap: 4 }}>
-        <h2 style={HEADING}>{t('panel.title')}</h2>
-        <p style={NOTE}>{t('panel.desc')}</p>
-        <p style={NOTE}>
-          {t('runtime.status', {
-            state: runtime?.active ? t('runtime.active', { state: status, count: runtime.active }) : status,
-          })}
-        </p>
-      </div>
+      <header className="decision-review-header">
+        <div className="decision-review-header-top">
+          <h2 className="decision-review-title">{t('panel.title')}</h2>
+          <span className="decision-review-status-badge" data-state={statusKind}>
+            <span className="decision-review-status-dot" aria-hidden="true" />
+            <span>
+              {t('runtime.status', {
+                state: runtime?.active ? t('runtime.active', { state: status, count: runtime.active }) : status,
+              })}
+            </span>
+          </span>
+        </div>
+        <p className="decision-review-subtitle">{t('panel.desc')}</p>
+      </header>
       {problems.length > 0 && (
-        <div role="alert" style={{ ...CARD, gap: 4 }}>
-          <div style={{ fontWeight: 600, color: DANGER }}>{t('problems.title')}</div>
-          <p style={NOTE}>{t('problems.desc')}</p>
+        <div role="alert" className="decision-review-alert">
+          <div className="decision-review-alert-title">
+            <AlertIcon />
+            <span>{t('problems.title')}</span>
+          </div>
+          <p className="decision-review-field-description">{t('problems.desc')}</p>
           <TechnicalDetails
             t={t}
             label={t('problems.details')}
             detail={
-              <ul style={{ paddingInlineStart: 20, marginBlock: 4 }}>
+              <ul className="decision-review-alert-list">
                 {problems.map((issue, i) => (
                   <li key={i}>{settingsIssueText(t, issue, true)}</li>
                 ))}
@@ -303,75 +312,86 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
         </div>
       )}
 
-      <ChoiceField<ReviewEngine>
-        label={t('engine.label')}
-        hint={t('engine.hint')}
-        value={settings.engine}
-        items={[
-          { value: 'decisions', label: t('engine.decisions') },
-          { value: 'session', label: t('engine.session') },
-        ]}
-        onChange={(value) => setField('engine', value)}
-      />
-      {repairingDecisions && <p style={NOTE}>{t('engine.repair')}</p>}
-      {showDecisionsFields && textInput('endpoint', t('endpoint.label'), 'url')}
-      {isDecisions && (
-        <div>
-          <SettingField label={t('apikey.label')} hint={[keyStatus, t('apikey.hint')].filter(Boolean).join(' ')}>
-            {(control) => (
-              <Input
-                {...control}
-                type="password"
-                autoComplete="new-password"
-                value={apiKeyInput}
-                placeholder={settings.hasApiKey && !clearKey ? t('apikey.placeholder') : undefined}
-                onChange={(event) => {
-                  markEdited()
-                  setApiKeyInput(event.target.value)
-                }}
-                disabled={clearKey}
-              />
+      <section className="decision-review-card decision-review-section">
+        <ChoiceField<ReviewEngine>
+          label={t('engine.label')}
+          hint={t('engine.hint')}
+          value={settings.engine}
+          items={[
+            { value: 'decisions', label: t('engine.decisions') },
+            { value: 'session', label: t('engine.session') },
+          ]}
+          onChange={(value) => setField('engine', value)}
+        />
+        {repairingDecisions && <p className="decision-review-repair-note">{t('engine.repair')}</p>}
+        {showDecisionsFields && (
+          <div className="decision-review-subpanel">
+            {textInput('endpoint', t('endpoint.label'), 'url')}
+            {isDecisions && (
+              <SettingField label={t('apikey.label')} hint={[keyStatus, t('apikey.hint')].filter(Boolean).join(' ')}>
+                {(control) => (
+                  <div className="decision-review-apikey-row">
+                    <Input
+                      {...control}
+                      type="password"
+                      autoComplete="new-password"
+                      value={apiKeyInput}
+                      placeholder={settings.hasApiKey && !clearKey ? t('apikey.placeholder') : undefined}
+                      onChange={(event) => {
+                        markEdited()
+                        setApiKeyInput(event.target.value)
+                      }}
+                      disabled={clearKey}
+                      className="decision-review-apikey-input"
+                    />
+                    {settings.hasApiKey && (
+                      <Button
+                        variant={clearKey ? 'outline' : 'destructive'}
+                        className="decision-review-apikey-clear"
+                        onClick={() => {
+                          markEdited()
+                          setApiKeyInput('')
+                          setClearKey(!clearKey)
+                        }}
+                      >
+                        {t(clearKey ? 'apikey.clear.undo' : 'apikey.clear')}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </SettingField>
             )}
-          </SettingField>
-          {settings.hasApiKey && (
-            <Button
-              variant={clearKey ? 'outline' : 'destructive'}
-              style={{ marginTop: 6 }}
-              onClick={() => {
-                markEdited()
-                setApiKeyInput('')
-                setClearKey(!clearKey)
-              }}
-            >
-              {t(clearKey ? 'apikey.clear.undo' : 'apikey.clear')}
-            </Button>
-          )}
-        </div>
-      )}
-      {showDecisionsFields && textInput('model', t('model.label'))}
-      <ChoiceField<DenialRoute>
-        label={t('denialroute.label')}
-        hint={t('denialroute.hint')}
-        value={settings.denialRoute ?? 'ask'}
-        items={[
-          { value: 'ask', label: t('denialroute.ask') },
-          { value: 'final', label: t('denialroute.final') },
-        ]}
-        onChange={(value) => setField('denialRoute', value)}
-      />
-      <SettingField label={t('timeout.label')} hint={t('timeout.hint', TIMEOUT_SECONDS_RANGE)} error={timeoutError}>
-        {(control) => (
-          <Input
-            {...control}
-            type="text"
-            inputMode="decimal"
-            value={settings.timeoutSeconds}
-            onChange={(event) => setField('timeoutSeconds', event.target.value)}
-            aria-invalid={timeoutError ? true : undefined}
-            className="decision-review-timeout"
-          />
+            {textInput('model', t('model.label'))}
+          </div>
         )}
-      </SettingField>
+      </section>
+
+      <section className="decision-review-card decision-review-section">
+        <ChoiceField<DenialRoute>
+          label={t('denialroute.label')}
+          hint={t('denialroute.hint')}
+          value={settings.denialRoute ?? 'ask'}
+          items={[
+            { value: 'ask', label: t('denialroute.ask') },
+            { value: 'final', label: t('denialroute.final') },
+          ]}
+          onChange={(value) => setField('denialRoute', value)}
+        />
+        <hr className="decision-review-divider" />
+        <SettingField label={t('timeout.label')} hint={t('timeout.hint', TIMEOUT_SECONDS_RANGE)} error={timeoutError}>
+          {(control) => (
+            <Input
+              {...control}
+              type="text"
+              inputMode="decimal"
+              value={settings.timeoutSeconds}
+              onChange={(event) => setField('timeoutSeconds', event.target.value)}
+              aria-invalid={timeoutError ? true : undefined}
+              className="decision-review-timeout"
+            />
+          )}
+        </SettingField>
+      </section>
 
       <RulesEditor
         t={t}
@@ -396,24 +416,37 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
         />
       )}
 
-      <div style={ACTION_BAR}>
-        <Button onClick={save} disabled={saving}>
+      <div className="decision-review-action-bar">
+        <Button onClick={save} disabled={saving} className="decision-review-save-button">
           {t(saving ? 'saving' : 'save')}
         </Button>
         {showMissing && !validation.valid ? (
-          <span role="alert" style={ERROR_NOTE}>
+          <span role="alert" className="decision-review-action-error">
             {t('save.invalid')}
           </span>
         ) : null}
         {showMissing && invalidFieldNames.length > 0 ? (
-          <span role="alert" style={ERROR_NOTE}>
+          <span role="alert" className="decision-review-action-error">
             <button type="button" className="decision-review-field-error-link" onClick={focusInvalidSetting}>
               {t('save.fieldsInvalid', { fields: invalidFieldNames.join(', ') })}
             </button>
           </span>
         ) : saved && !dirty && validation.valid ? (
-          <span role="status" style={{ ...NOTE, color: 'var(--dsw-alias-state-success-primary, #21783e)' }}>
-            {t('saved')}
+          <span role="status" className="decision-review-action-saved">
+            <svg
+              aria-hidden="true"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+            <span>{t('saved')}</span>
           </span>
         ) : null}
       </div>
@@ -432,12 +465,36 @@ function SettingsForm({ t, resolveText, api, initialConfig }: ConfigPanelProps &
   )
 }
 
+function AlertIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="decision-review-alert-icon"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" x2="12" y1="8" y2="12" />
+      <line x1="12" x2="12.01" y1="16" y2="16" />
+    </svg>
+  )
+}
+
 function RequestError({ t, error }: { t: Translate; error: ApiError }) {
   return (
-    <div role="alert" style={ERROR_NOTE}>
-      {t(error.key)}
+    <div role="alert" className="decision-review-alert">
+      <div className="decision-review-alert-title">
+        <AlertIcon />
+        <span>{t(error.key)}</span>
+      </div>
       {error.issue ? (
-        <div>{settingsIssueText(t, error.issue)}</div>
+        <div className="decision-review-alert-message">{settingsIssueText(t, error.issue)}</div>
       ) : (
         <TechnicalDetails
           t={t}

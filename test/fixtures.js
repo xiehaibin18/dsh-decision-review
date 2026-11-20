@@ -106,6 +106,11 @@ export function makeHost(options = {}) {
     async emit(event, ...args) {
       for (const listener of [...(listeners.get(event) ?? [])]) await listener(...args)
     },
+    async waterfall(event, req, fallback = async () => 'unavailable') {
+      const chain = [...(listeners.get(event) ?? [])]
+      const dispatch = (index) => (index < chain.length ? chain[index](req, () => dispatch(index + 1)) : fallback())
+      return await dispatch(0)
+    },
     async dispose() {
       while (effects.length > 0) await effects.pop()()
     },

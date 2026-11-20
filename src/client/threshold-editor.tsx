@@ -17,26 +17,44 @@ interface ThresholdEditorProps {
 export function ThresholdEditor({ t, values, parsedValues, savedValues, onChange, showErrors }: ThresholdEditorProps) {
   const hintId = React.useId()
   return (
-    <details className="decision-review-thresholds">
-      <summary>{t('thresholds.title')}</summary>
-      <p id={hintId} className="decision-review-field-description">
-        {t('thresholds.hint')}
-      </p>
-      <div className="decision-review-thresholds-list">
-        {THRESHOLDS.map((field) => (
-          <ThresholdField
-            key={field}
-            t={t}
-            field={field}
-            value={values[field]}
-            score={parsedValues[field] ?? savedValues[field]}
-            invalid={showErrors && parsedValues[field] === null}
-            defaultValue={THRESHOLD_DEFAULTS[field]}
-            savedValue={savedValues[field]}
-            hintId={hintId}
-            onChange={(value) => onChange(field, value)}
-          />
-        ))}
+    <details className="decision-review-card decision-review-thresholds">
+      <summary className="decision-review-thresholds-summary">
+        <span className="decision-review-thresholds-summary-title">{t('thresholds.title')}</span>
+        <svg
+          aria-hidden="true"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="decision-review-thresholds-chevron"
+        >
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+      </summary>
+      <div className="decision-review-thresholds-body">
+        <p id={hintId} className="decision-review-field-description">
+          {t('thresholds.hint')}
+        </p>
+        <div className="decision-review-thresholds-list">
+          {THRESHOLDS.map((field) => (
+            <ThresholdField
+              key={field}
+              t={t}
+              field={field}
+              value={values[field]}
+              score={parsedValues[field] ?? savedValues[field]}
+              invalid={showErrors && parsedValues[field] === null}
+              defaultValue={THRESHOLD_DEFAULTS[field]}
+              savedValue={savedValues[field]}
+              hintId={hintId}
+              onChange={(value) => onChange(field, value)}
+            />
+          ))}
+        </div>
       </div>
     </details>
   )
@@ -68,11 +86,25 @@ function ThresholdField({
   const savedId = id + '-saved'
   const errorId = id + '-error'
   const same = defaultValue === savedValue
+  const labelText = t(`thresholds.${field}`)
+  const sepIndex = labelText.indexOf(' — ')
+  const keyPart = sepIndex > 0 ? labelText.slice(0, sepIndex) : null
+  const descPart = sepIndex > 0 ? labelText.slice(sepIndex + 3) : null
 
   return (
     <div className="decision-review-threshold">
       <div className="decision-review-threshold-title">
-        <span id={id}>{t(`thresholds.${field}`)}</span>
+        <span id={id} className="decision-review-threshold-label">
+          {keyPart !== null && descPart !== null ? (
+            <>
+              <code className="decision-review-threshold-key">{keyPart}</code>
+              <span className="decision-review-threshold-sep">{' — '}</span>
+              <span className="decision-review-threshold-desc">{descPart}</span>
+            </>
+          ) : (
+            labelText
+          )}
+        </span>
         <Input
           type="text"
           inputMode="decimal"

@@ -153,3 +153,59 @@ export interface TestResponse {
   ok: true
   results: TestResult[]
 }
+
+export interface PendingEditPreview {
+  oldText?: string
+  newText?: string
+  oldChars?: number
+  newChars?: number
+  replaceAll: boolean
+}
+
+export interface PendingActionSummary {
+  kind: 'command' | 'file' | 'url' | 'search' | 'mcp' | 'tool'
+  target?: string
+  workdir?: string
+  detail?: string
+  edit?: PendingEditPreview
+  meta?: { chars?: number }
+}
+
+export interface PendingDecisionScores {
+  riskClass: { choice: Risk; confidence: number } | null
+  predicates: Record<PredicateName, number | null>
+  refused: string[]
+  thresholds: Record<Threshold, number>
+}
+
+export interface PendingReview {
+  callId: string
+  tool: string
+  isPtcInner: boolean
+  engine: ReviewEngine
+  risk: Risk
+  why: DenialExplanation
+  display: { en: string; zh: string }
+  action: PendingActionSummary
+  scores: PendingDecisionScores | null
+  createdAt: number
+}
+
+export interface PendingReviewResponse {
+  pending: PendingReview | null
+}
+
+/** Quote and escape a working directory when leading, trailing, repeated, or non-space/control whitespace could hide its value. */
+export function formatVisibleWorkdir(workdir: string): string {
+  let needsQuotes = /^\s|\s$|\s{2,}|[^\S ]/.test(workdir)
+  if (!needsQuotes) {
+    for (let i = 0; i < workdir.length; i += 1) {
+      const code = workdir.charCodeAt(i)
+      if (code < 0x20 || code === 0x7f) {
+        needsQuotes = true
+        break
+      }
+    }
+  }
+  return needsQuotes ? JSON.stringify(workdir) : workdir
+}

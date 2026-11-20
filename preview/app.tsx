@@ -5,7 +5,8 @@ import {
 } from '@xiehaibin18/dsh-plugin-dev/appearance'
 import { useEffect, useRef, useState } from 'react'
 import { PreviewCanvas } from './canvas.js'
-import { CONFIG_SLOT, STATS_SLOT, HostPreview, type PreviewSlot } from './host-preview.js'
+import { APPROVAL_CASES, type ApprovalCaseId } from './fixtures.js'
+import { APPROVAL_SLOT, CONFIG_SLOT, STATS_SLOT, HostPreview, type PreviewSlot } from './host-preview.js'
 import { createSession, deleteSession, recoverSession, type ActiveSession } from './http.js'
 import { SCENES, type SceneId } from './scenes.js'
 
@@ -15,6 +16,7 @@ export function PreviewApp({ initialSession }: { initialSession: ActiveSession }
   const [language, setLanguage] = useState<PreviewLanguage>('zh')
   const [theme, setTheme] = useState<PreviewTheme>('light')
   const [slot, setSlot] = useState<PreviewSlot>(CONFIG_SLOT)
+  const [approvalCase, setApprovalCase] = useState<ApprovalCaseId>('security')
   const [error, setError] = useState('')
   const [recovered, setRecovered] = useState(false)
   const [reload, setReload] = useState(0)
@@ -85,8 +87,21 @@ export function PreviewApp({ initialSession }: { initialSession: ActiveSession }
             <select value={slot} onChange={(event) => setSlot(event.target.value as PreviewSlot)}>
               <option value={CONFIG_SLOT}>插件详情 · 配置</option>
               <option value={STATS_SLOT}>会话输入框 · 统计栏</option>
+              <option value={APPROVAL_SLOT}>会话审批 · 评审说明卡</option>
             </select>
           </label>
+          {slot === APPROVAL_SLOT && (
+            <label>
+              审批示例
+              <select value={approvalCase} onChange={(event) => setApprovalCase(event.target.value as ApprovalCaseId)}>
+                {APPROVAL_CASES.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <PreviewAppearanceControls
             language={language}
             theme={theme}
@@ -130,7 +145,7 @@ export function PreviewApp({ initialSession }: { initialSession: ActiveSession }
         {error && <p role="alert">预览服务错误：{error}。可重置场景重试。</p>}
       </header>
       <PreviewCanvas>
-        <HostPreview slot={slot} session={session} language={language} reload={reload} />
+        <HostPreview slot={slot} session={session} language={language} reload={reload} approvalCase={approvalCase} />
       </PreviewCanvas>
     </div>
   )

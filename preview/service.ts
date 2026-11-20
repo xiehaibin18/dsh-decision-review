@@ -14,7 +14,7 @@ import {
   SettingsValidationError,
   type StoredSettings,
 } from '../src/server/settings.js'
-import { fixtureSettings, fixtureStats, fixtureTest } from './fixtures.js'
+import { fixturePendingReview, fixtureSettings, fixtureStats, fixtureTest } from './fixtures.js'
 import { isSceneId, type PreviewSession } from './scenes.js'
 
 interface FixtureSession extends PreviewSession {
@@ -81,7 +81,7 @@ export function createPreviewService() {
     }
 
     const match =
-      /^\/api\/preview\/sessions\/([^/]+)(?:\/(recover|decision-review\/(?:config|save|test|stats)))?$/.exec(
+      /^\/api\/preview\/sessions\/([^/]+)(?:\/(recover|decision-review\/(?:config|save|test|stats|pending)))?$/.exec(
         url.pathname,
       )
     if (!match) throw new PreviewError(404, 'Unknown preview route')
@@ -102,7 +102,7 @@ export function createPreviewService() {
     }
 
     const operation = route.slice('decision-review/'.length)
-    requireMethod(request, operation === 'config' || operation === 'stats' ? 'GET' : 'POST')
+    requireMethod(request, operation === 'config' || operation === 'stats' || operation === 'pending' ? 'GET' : 'POST')
     const body = request.method === 'POST' ? await readBody(request) : undefined
     const signal = AbortSignal.any([request.signal, session.lifecycle.signal])
     // Snapshot the operation's settings and fault at dispatch, matching an in-flight HTTP request.
@@ -158,6 +158,12 @@ export function createPreviewService() {
       case 'stats':
         if (!url.searchParams.get('session')) throw new PreviewError(400, 'missing session')
         return json(fixtureStats(session.scene))
+      case 'pending': {
+        const sessionId = url.searchParams.get('session')
+        if (!sessionId) throw new PreviewError(400, 'missing session')
+        const callId = url.searchParams.get('callId')
+        return json({ pending: callId ? fixturePendingReview(sessionId, callId) : null })
+      }
       default:
         throw new PreviewError(404, 'Unknown preview operation')
     }
