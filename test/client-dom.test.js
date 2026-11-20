@@ -421,25 +421,25 @@ describe('composer approval stats pill', () => {
           value: 0.15,
           threshold: 0.7,
           pred: 'production_effect',
-          predValue: 0.3,
+          predValue: 0.799,
         },
         display: {
-          en: 'the explicit authorization score is below the threshold (0.15 < 0.7); production effect reaches 0.3',
-          zh: '明确授权分数低于阈值（0.15 < 0.7）；影响生产达到 0.3',
+          en: 'the explicit authorization score is below the threshold (0.15 < 0.7); production effect reaches 0.799',
+          zh: '明确授权分数低于阈值（0.15 < 0.7）；影响生产达到 0.799',
         },
-        action: { kind: 'command', detail: 'npm run deploy:preview' },
+        action: { kind: 'command', workdir: ' ', detail: 'npm run deploy:preview' },
         scores: {
           riskClass: { choice: 'medium', confidence: 0.9 },
           predicates: {
             exfiltration: 0.01,
             irreversible_deletion: 0.04,
-            production_effect: 0.3,
+            production_effect: 0.799,
             security_change: 0.12,
             session_created_cleanup: 0.0,
             explicit_authorization: 0.15,
           },
           refused: [],
-          thresholds: { tConf: 0.75, tHighPred: 0.85, tMedPred: 0.5, tStrongPred: 0.8, tAuth: 0.7 },
+          thresholds: { tConf: 0.75, tHighPred: 0.85, tMedPred: 0.5, tStrongPred: 0.8, tAuth: 0.705 },
         },
         createdAt: 1732150002000,
       }
@@ -509,18 +509,22 @@ describe('composer approval stats pill', () => {
       expect(cardB.textContent).toContain('limit 0.6')
       expect(cardB.textContent).not.toContain('limit 0.9')
 
-      // A sub-threshold blamed medium predicate stays visible in key signals, but is NOT colored red (`error`).
+      // A sub-threshold blamed medium predicate stays visible in key signals, keeps distinguishing precision,
+      // displays the actual comparator, is NOT colored red (`error`), and quotes whitespace-only workdir visibly.
       activeInteraction = { key: 'approval-sub', kind: 'approval', sessionId: 'session-ptc', callId: 'call-dom-sub' }
       await client.render(STATS_SLOT, { sessionId: 'session-ptc', useSessionStatus })
       const cardSub = seat.querySelector('.decision-review-approval-card')
       expect(cardSub).not.toBeNull()
+      expect(cardSub.querySelector('.decision-review-approval-workdir-path')?.textContent).toBe('" "')
       const signalRows = [...cardSub.querySelectorAll('.decision-review-approval-signal')]
       const prodRow = signalRows.find((el) => el.textContent.includes('Production effect'))
       const authRow = signalRows.find((el) => el.textContent.includes('Explicit authorization'))
       expect(prodRow).toBeDefined()
       expect(prodRow.getAttribute('data-tone')).toBe('normal')
+      expect(prodRow.textContent).toContain('0.799 < limit 0.8')
       expect(authRow).toBeDefined()
       expect(authRow.getAttribute('data-tone')).toBe('warn')
+      expect(authRow.textContent).toContain('0.15 < min 0.705')
 
       // A mismatched callId response from the server is rejected and renders nothing.
       activeInteraction = { key: 'approval-3', kind: 'approval', sessionId: 'session-ptc', callId: 'call-mismatch' }

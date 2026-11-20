@@ -1,5 +1,11 @@
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
-import type { DenialExplanation, PendingActionSummary, PredicateName, ReviewDecision } from '../shared/contracts.js'
+import {
+  formatVisibleWorkdir,
+  type DenialExplanation,
+  type PendingActionSummary,
+  type PredicateName,
+  type ReviewDecision,
+} from '../shared/contracts.js'
 import { isRecord } from './json.js'
 
 type Locale = 'en' | 'zh'
@@ -174,7 +180,7 @@ export function denied(exec: ToolExecution, reason?: string): PreToolDecision {
 const PENDING_DETAIL_MAX = 1200
 
 function explicitWorkdir(fields: Record<string, unknown>): string | undefined {
-  return typeof fields.workdir === 'string' && fields.workdir.trim() !== '' ? fields.workdir : undefined
+  return typeof fields.workdir === 'string' && fields.workdir.length > 0 ? fields.workdir : undefined
 }
 
 /** Extract a structured, display-safe summary of the pending tool action for UI cards. */
@@ -247,7 +253,7 @@ function describePendingLine(exec: ToolExecution, locale: Locale): string {
     const workdir = explicitWorkdir(fields)
     const lines: string[] = []
     if (exec.parent !== undefined) lines.push(copy.pending(`bash ${truncate(fields.command)}`))
-    if (workdir !== undefined) lines.push(copy.workdir(truncate(workdir)))
+    if (workdir !== undefined) lines.push(copy.workdir(truncate(formatVisibleWorkdir(workdir))))
     return lines.join('\n')
   }
   if (name === 'write') {

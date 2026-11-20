@@ -194,3 +194,18 @@ export interface PendingReview {
 export interface PendingReviewResponse {
   pending: PendingReview | null
 }
+
+/** Quote and escape a working directory when leading, trailing, repeated, or non-space/control whitespace could hide its value. */
+export function formatVisibleWorkdir(workdir: string): string {
+  let needsQuotes = /^\s|\s$|\s{2,}|[^\S ]/.test(workdir)
+  if (!needsQuotes) {
+    for (let i = 0; i < workdir.length; i += 1) {
+      const code = workdir.charCodeAt(i)
+      if (code < 0x20 || code === 0x7f) {
+        needsQuotes = true
+        break
+      }
+    }
+  }
+  return needsQuotes ? JSON.stringify(workdir) : workdir
+}

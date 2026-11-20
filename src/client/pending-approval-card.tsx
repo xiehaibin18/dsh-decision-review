@@ -1,7 +1,13 @@
 /** @jsxRuntime classic */
 import * as React from 'react'
 import { createPortal } from 'react-dom'
-import type { DenialExplanation, PendingDecisionScores, PendingReview, PredicateName } from '../shared/contracts.js'
+import {
+  formatVisibleWorkdir,
+  type DenialExplanation,
+  type PendingDecisionScores,
+  type PendingReview,
+  type PredicateName,
+} from '../shared/contracts.js'
 import type { ReviewApi } from './api.js'
 import type { ResolveText, Translate } from './messages.js'
 
@@ -16,8 +22,22 @@ interface SignalRow {
   refused: boolean
 }
 
-function formatScore(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0$/, '')
+function formatAtPrecision(value: number, decimals: number): string {
+  const fixed = value.toFixed(decimals)
+  return decimals === 0 ? fixed : fixed.replace(/\.?0+$/, '')
+}
+
+/** Format a score and optional threshold with enough decimals to preserve fine thresholds and distinguish unequal values. */
+function formatScorePair(value: number, threshold: number | null): { score: string; limit: string | null } {
+  if (threshold === null) return { score: formatAtPrecision(value, 2), limit: null }
+  for (let decimals = 2; decimals <= 10; decimals += 1) {
+    const score = formatAtPrecision(value, decimals)
+    const limit = formatAtPrecision(threshold, decimals)
+    if (Number(limit) === threshold && (value === threshold || score !== limit)) {
+      return { score, limit }
+    }
+  }
+  return { score: String(value), limit: String(threshold) }
 }
 
 function clampUnit(value: number): number {
@@ -232,7 +252,9 @@ export function PendingApprovalCard({ t, resolveText, pending }: PendingApproval
               {pending.action.workdir && (
                 <div className="decision-review-approval-workdir">
                   <span className="decision-review-approval-workdir-label">{t('approval.action.workdir')}</span>
-                  <code className="decision-review-approval-workdir-path">{pending.action.workdir}</code>
+                  <code className="decision-review-approval-workdir-path">
+                    {formatVisibleWorkdir(pending.action.workdir)}
+                  </code>
                 </div>
               )}
               {edit && (
@@ -320,11 +342,20 @@ function SignalMeter({ t, row }: { t: Translate; row: SignalRow }) {
   const tone = row.refused ? 'error' : row.triggered ? (row.direction === 'min' ? 'warn' : 'error') : 'normal'
   const fillPercent = row.value === null ? 0 : clampUnit(row.value) * 100
   const thresholdPercent = row.threshold === null ? null : clampUnit(row.threshold) * 100
+  const formatted = row.value === null ? null : formatScorePair(row.value, row.threshold)
+  const comparator =
+    row.value === null || row.threshold === null
+      ? null
+      : row.value < row.threshold
+        ? '<'
+        : row.value > row.threshold
+          ? '>'
+          : '='
   const thresholdHint =
-    row.threshold === null
+    formatted?.limit == null
       ? null
       : t(row.direction === 'min' ? 'approval.scores.minThreshold' : 'approval.scores.maxThreshold', {
-          value: formatScore(row.threshold),
+          value: formatted.limit,
         })
 
   return (
@@ -332,12 +363,17 @@ function SignalMeter({ t, row }: { t: Translate; row: SignalRow }) {
       <div className="decision-review-approval-signal-row">
         <span className="decision-review-approval-signal-label">{row.label}</span>
         <span className="decision-review-approval-signal-value">
-          {row.refused || row.value === null ? (
+          {row.refused || formatted === null ? (
             t('approval.scores.refused')
           ) : (
             <>
-              <strong>{formatScore(row.value)}</strong>
-              {thresholdHint && <span className="decision-review-approval-signal-limit"> · {thresholdHint}</span>}
+              <strong>{formatted.score}</strong>
+              {thresholdHint && comparator && (
+                <span className="decision-review-approval-signal-limit">
+                  {' '}
+                  {comparator} {thresholdHint}
+                </span>
+              )}
             </>
           )}
         </span>

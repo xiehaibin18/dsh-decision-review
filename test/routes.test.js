@@ -536,6 +536,53 @@ describe('Connection routes', () => {
     expect(ptcDecision.kind).toBe('ask')
     expect(ptcDecision.displayReason.en).toContain('Pending call: bash rm -rf ./dist\nWorking directory: /srv/prod/app')
     expect(ptcDecision.displayReason.zh).toContain('待评审的调用：bash rm -rf ./dist\n工作目录：/srv/prod/app')
+
+    // Whitespace-only workdir (e.g. " ") is preserved by DSH as a relative path, so keep and quote it visibly.
+    const spaceArgs = { command: 'rm -rf ./dist', workdir: ' ' }
+    const rawSpaceArgs = JSON.stringify(spaceArgs)
+    const spaceEvents = baseSession.snapshotEvents().map((event) => {
+      if (event.type === 'assistant/message') {
+        return {
+          ...event,
+          data: {
+            ...event.data,
+            message: {
+              ...event.data.message,
+              content: event.data.message.content.map((block) =>
+                block.type === 'tool-call' ? { ...block, name: 'bash', arguments: rawSpaceArgs } : block,
+              ),
+            },
+          },
+        }
+      }
+      if (event.type === 'tool/call') {
+        return { ...event, data: { ...event.data, name: 'bash', arguments: rawSpaceArgs } }
+      }
+      return event
+    })
+    const spaceSession = { ...baseSession, id: 'bash-workdir-space', snapshotEvents: () => spaceEvents }
+    const spaceExec = makeExec(spaceSession, { arguments: spaceArgs })
+    const spaceDecision = await preExecute(spaceExec, async () => ({ kind: 'allow' }))
+    expect(spaceDecision.kind).toBe('ask')
+    expect(spaceDecision.displayReason.en).toContain('Working directory: " "')
+    expect(spaceDecision.displayReason.zh).toContain('工作目录：" "')
+
+    let spacePending = null
+    await host.waterfall(
+      'approval/request',
+      { agent: { session: spaceSession }, toolName: 'bash', callId: spaceExec.callId },
+      async () => {
+        spacePending = await (
+          await call('pending', new Request(`${BASE}/pending?session=${spaceSession.id}&callId=${spaceExec.callId}`))
+        ).json()
+        return 'rejected'
+      },
+    )
+    expect(spacePending.pending.action).toStrictEqual({
+      kind: 'command',
+      workdir: ' ',
+      detail: 'rm -rf ./dist',
+    })
   })
 
   test('preserves edit old_string, new_string, and replace_all in pending summary and fallback prompt', async () => {
