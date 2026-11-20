@@ -52,9 +52,12 @@ function RuleEditor({
   const conditionId = baseId + '-condition'
 
   return (
-    <section aria-labelledby={headingId} className="decision-review-rule">
+    <section aria-labelledby={headingId} className="decision-review-rule" data-verdict={verdict ?? 'invalid'}>
       <div className="decision-review-rule-header">
-        <h3 id={headingId}>{t('rules.item', { n })}</h3>
+        <div className="decision-review-rule-title-group">
+          <span className="decision-review-rule-dot" aria-hidden="true" />
+          <h3 id={headingId}>{t('rules.item', { n })}</h3>
+        </div>
         <Button
           variant="ghost"
           size="sm"
@@ -156,7 +159,7 @@ export function RulesEditor({
   }
 
   return (
-    <section aria-labelledby={sectionId} className="decision-review-rules">
+    <section aria-labelledby={sectionId} className="decision-review-card decision-review-rules">
       <header className="decision-review-rules-intro">
         <div className="decision-review-rules-heading">
           <h2 id={sectionId}>{t('rules.title')}</h2>
@@ -167,8 +170,8 @@ export function RulesEditor({
             {t('rules.summary', { count: rules.length, maxCount: RULE_MAX_COUNT, total, maxTotal: RULE_MAX_TOTAL })}
           </p>
         </div>
-        <p>{t('rules.hint')}</p>
-        <p className="decision-review-rules-note">{t(`rules.engine.${engine}`)}</p>
+        <p className="decision-review-rules-lead">{t('rules.hint')}</p>
+        <p className="decision-review-rules-note decision-review-engine-note">{t(`rules.engine.${engine}`)}</p>
       </header>
       {countInvalid && (
         <p className="decision-review-rules-note" data-error>
@@ -182,9 +185,26 @@ export function RulesEditor({
       )}
       <div className="decision-review-rules-body" data-empty={rules.length === 0 || undefined}>
         {rules.length === 0 ? (
-          <div className="decision-review-rules-intro">
-            <h3>{t('rules.empty.title')}</h3>
-            <p className="decision-review-rules-note">{t('rules.empty.desc')}</p>
+          <div className="decision-review-rules-empty">
+            <div className="decision-review-rules-empty-icon" aria-hidden="true">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+                <path d="m9 12 2 2 4-4" />
+              </svg>
+            </div>
+            <div className="decision-review-rules-intro">
+              <h3>{t('rules.empty.title')}</h3>
+              <p className="decision-review-rules-note">{t('rules.empty.desc')}</p>
+            </div>
           </div>
         ) : (
           <ol className="decision-review-rules-list" role="list">

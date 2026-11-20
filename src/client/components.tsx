@@ -1,7 +1,6 @@
 /** @jsxRuntime classic */
 import * as React from 'react'
 import type { Translate } from './messages.js'
-import { NOTE } from './styles.js'
 import { Field, FieldDescription, FieldLabel } from './ui/field.js'
 
 export function SettingField({
@@ -44,9 +43,9 @@ export function TechnicalDetails({
 }) {
   if (!detail) return null
   return (
-    <details style={{ ...NOTE, marginTop: 4 }}>
-      <summary style={{ cursor: 'pointer' }}>{label}</summary>
-      <div style={{ whiteSpace: 'pre-wrap' }}>{detail}</div>
+    <details className="decision-review-details">
+      <summary className="decision-review-details-summary">{label}</summary>
+      <div className="decision-review-details-body">{detail}</div>
     </details>
   )
 }
