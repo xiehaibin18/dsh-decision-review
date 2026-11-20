@@ -35,6 +35,35 @@ async function statsDetails() {
       metrics: Object.fromEntries([...popup.querySelectorAll('dl > div')].map(row => [row.querySelector('dt').textContent, row.querySelector('dd').textContent])) };
   })()`)
 }
+async function checkDockTruncation() {
+  const layout = await view.evaluate(`(() => {
+    const dock = document.querySelector('.preview-stats-dock');
+    const trigger = ${statsPill};
+    const label = trigger.lastElementChild;
+    const measure = () => ({
+      dockHeight: dock.offsetHeight,
+      triggerFits: trigger.getBoundingClientRect().right <= dock.getBoundingClientRect().right,
+      labelHeight: label.offsetHeight, labelWidth: label.clientWidth, labelScrollWidth: label.scrollWidth,
+      textOverflow: getComputedStyle(label).textOverflow,
+      iconWidth: trigger.querySelector('svg').getBoundingClientRect().width,
+    });
+    const wide = measure();
+    // Leave the same space as a crowded host dock without resizing the plugin control itself.
+    dock.style.maxWidth = '200px';
+    const narrow = measure();
+    dock.style.removeProperty('max-width');
+    return { wide, narrow };
+  })()`)
+  const { wide, narrow } = layout
+  assert.equal(wide.labelScrollWidth, wide.labelWidth, 'The full reading should fit in a wide dock')
+  assert.equal(narrow.labelHeight, wide.labelHeight, 'The review reading should stay on one line')
+  assert.equal(narrow.dockHeight, wide.dockHeight, 'The crowded dock should keep its single-row height')
+  assert.ok(narrow.triggerFits)
+  assert.ok(narrow.labelScrollWidth > narrow.labelWidth && narrow.labelWidth > 0)
+  assert.equal(narrow.textOverflow, 'ellipsis')
+  assert.equal(narrow.iconWidth, wide.iconWidth)
+  return layout
+}
 async function statsGeometry() {
   await until(
     `document.querySelector('${statsCard}')?.closest('[data-side="top"]')?.getBoundingClientRect().bottom < ${statsPill}.getBoundingClientRect().top`,
@@ -377,6 +406,7 @@ try {
   assert.equal(dock.pillFilter, 'none')
   assert.match(dock.contextFilter, /blur\(/)
   assert.equal(dock.formHidden, true)
+  const chineseDock = await checkDockTruncation()
   await capture('zh-light-desktop-dock')
   const triggerCenter = await view.evaluate(`(() => {
     const rect = ${statsPill}.getBoundingClientRect();
@@ -420,6 +450,8 @@ try {
   await capture('zh-dark-desktop-review-stats')
   await choose('界面语言', 'en')
   await until(`${statsPill}?.textContent === '12 reviewed · 67% auto-passed'`)
+  const englishDock = await checkDockTruncation()
+  passed('Crowded dock keeps one row and truncates Chinese and English review readings', { chineseDock, englishDock })
   await click('最小窗口')
   await choose('缩放', '0.5')
   await view.resize(390, 844)

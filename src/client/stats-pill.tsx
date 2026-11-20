@@ -78,7 +78,7 @@ function StatsDetails({ t, stats }: { t: Translate; stats: ReviewStats }) {
       <Popover>
         <PopoverTrigger className="decision-review-stats-trigger">
           <StatsIcon />
-          <span>{label}</span>
+          <span className="decision-review-stats-label">{label}</span>
         </PopoverTrigger>
         <PopoverContent container={container} side="top" align="end" sideOffset={8}>
           <div className="decision-review-stats-header">
