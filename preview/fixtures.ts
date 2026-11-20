@@ -113,6 +113,7 @@ function buildFixturePendingReview(caseId: string): PendingReview | null {
         display: { en: localizedWhy(why, 'en'), zh: localizedWhy(why, 'zh') },
         action: {
           kind: 'command',
+          workdir: '/srv/deploy/payments-api',
           detail: 'git push --force-with-lease origin main',
         },
         scores: {

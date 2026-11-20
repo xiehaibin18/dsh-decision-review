@@ -252,7 +252,7 @@ describe('Connection routes', () => {
     await expect(empty.json()).resolves.toStrictEqual({ pending: null })
   })
 
-  test('publishes pending review context per callId and clears it on approval, tools/result, or abort', async () => {
+  test('exposes pending review only while approval/request is active, including hot-load prepending and abort/never paths', async () => {
     stubDecisionsFetch(() =>
       makeAnswers({
         risk: 'medium',
@@ -268,15 +268,31 @@ describe('Connection routes', () => {
     const decision = await preExecute(exec, async () => ({ kind: 'allow' }))
     expect(decision.kind).toBe('ask')
 
-    const mismatched = await (
-      await call('pending', new Request(`${BASE}/pending?session=session-${session.id}&callId=other-call`))
-    ).json()
-    expect(mismatched).toStrictEqual({ pending: null })
-
-    const active = await (
+    // Staged in pre-execute, but NOT publicly exposed before `approval/request` begins.
+    const beforeApproval = await (
       await call('pending', new Request(`${BASE}/pending?session=session-${session.id}&callId=${exec.callId}`))
     ).json()
-    expect(active.pending).toMatchObject({
+    expect(beforeApproval).toStrictEqual({ pending: null })
+
+    // Published while `approval/request` is awaiting a decision, keyed by callId, and cleared on exit.
+    let activeDuringApproval = null
+    let mismatchedDuringApproval = null
+    const outcome = await host.waterfall(
+      'approval/request',
+      { agent: { session }, toolName: 'bash', callId: exec.callId },
+      async () => {
+        mismatchedDuringApproval = await (
+          await call('pending', new Request(`${BASE}/pending?session=session-${session.id}&callId=other-call`))
+        ).json()
+        activeDuringApproval = await (
+          await call('pending', new Request(`${BASE}/pending?session=session-${session.id}&callId=${exec.callId}`))
+        ).json()
+        return 'allowed-once'
+      },
+    )
+    expect(outcome).toBe('allowed-once')
+    expect(mismatchedDuringApproval).toStrictEqual({ pending: null })
+    expect(activeDuringApproval.pending).toMatchObject({
       callId: exec.callId,
       tool: 'bash',
       isPtcInner: false,
@@ -286,39 +302,240 @@ describe('Connection routes', () => {
         predicates: { security_change: 0.91, explicit_authorization: 0.12 },
       },
     })
-
-    const approvalListener = host.listeners.get('approval/request')
-    await approvalListener({ agent: { session }, toolName: 'bash', callId: exec.callId }, async () => 'allowed-once')
     const settled = await (
       await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${exec.callId}`))
     ).json()
     expect(settled).toStrictEqual({ pending: null })
 
-    // When host effective approval policy is `never`, `approval/request` is skipped and `tools/result` closes the call.
+    // When host effective approval policy is `never`, `approval/request` is skipped;
+    // `/pending` never leaks the call even while `tools/result` is delayed by an earlier parallel call.
     await preExecute(exec, async () => ({ kind: 'allow' }))
-    const beforeResult = await (
+    const duringNeverDelay = await (
       await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${exec.callId}`))
     ).json()
-    expect(beforeResult.pending?.callId).toBe(exec.callId)
+    expect(duringNeverDelay).toStrictEqual({ pending: null })
     await host.emit('tools/result', exec, { isError: true, content: 'rejected' })
-    const afterResult = await (
-      await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${exec.callId}`))
-    ).json()
-    expect(afterResult).toStrictEqual({ pending: null })
+    let afterResultApproval = null
+    await host.waterfall(
+      'approval/request',
+      { agent: { session }, toolName: 'bash', callId: exec.callId },
+      async () => {
+        afterResultApproval = await (
+          await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${exec.callId}`))
+        ).json()
+        return 'rejected'
+      },
+    )
+    expect(afterResultApproval).toStrictEqual({ pending: null })
 
-    // Aborting the execution signal before approval settles also clears the pending record.
-    const abortController = new AbortController()
-    const abortedExec = makeExec(session, { signal: abortController.signal })
+    // Aborting the execution signal before approval clears the staged entry;
+    // aborting the request signal during approval withdraws the active entry immediately.
+    const preAbort = new AbortController()
+    const abortedExec = makeExec(session, { signal: preAbort.signal })
     await preExecute(abortedExec, async () => ({ kind: 'allow' }))
-    const beforeAbort = await (
-      await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${abortedExec.callId}`))
-    ).json()
-    expect(beforeAbort.pending?.callId).toBe(abortedExec.callId)
-    abortController.abort()
-    const afterAbort = await (
-      await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${abortedExec.callId}`))
-    ).json()
-    expect(afterAbort).toStrictEqual({ pending: null })
+    preAbort.abort()
+    let afterPreAbort = null
+    await host.waterfall(
+      'approval/request',
+      { agent: { session }, toolName: 'bash', callId: abortedExec.callId },
+      async () => {
+        afterPreAbort = await (
+          await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${abortedExec.callId}`))
+        ).json()
+        return 'cancelled'
+      },
+    )
+    expect(afterPreAbort).toStrictEqual({ pending: null })
+
+    const liveExec = makeExec(session, { callId: 'call-live-abort' })
+    await preExecute(liveExec, async () => ({ kind: 'allow' }))
+    const reqAbort = new AbortController()
+    let duringLive = null
+    let afterLiveAbort = null
+    await host.waterfall(
+      'approval/request',
+      { agent: { session }, toolName: 'bash', callId: liveExec.callId, signal: reqAbort.signal },
+      async () => {
+        duringLive = await (
+          await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${liveExec.callId}`))
+        ).json()
+        reqAbort.abort()
+        afterLiveAbort = await (
+          await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${liveExec.callId}`))
+        ).json()
+        return 'cancelled'
+      },
+    )
+    expect(duringLive.pending?.callId).toBe(liveExec.callId)
+    expect(afterLiveAbort).toStrictEqual({ pending: null })
+  })
+
+  test('prepends approval/request ahead of pre-existing remote answerers on hot-load', async () => {
+    const hotDir = makeProfileDir()
+    fs.writeFileSync(
+      path.join(hotDir, 'decision-review.settings.json'),
+      JSON.stringify({ apiKey: SECRET, model: 'model-a' }),
+    )
+    const hotHost = makeHost({ profileContext: { dir: hotDir } })
+    let pendingDuringRemote = null
+    let remoteResolvedOutcome = null
+    // Simulate a Web host remote approval listener registered before the plugin is hot-loaded,
+    // which settles the waterfall directly without calling `next()`.
+    hotHost.ctx.on('approval/request', async (req) => {
+      const route = hotHost.routes.get('/api/decision-review/pending')
+      pendingDuringRemote = await (
+        await route.fetch(new Request(`${BASE}/pending?session=${req.agent.session.id}&callId=${req.callId}`))
+      ).json()
+      remoteResolvedOutcome = 'allowed-once'
+      return remoteResolvedOutcome
+    })
+    try {
+      apply(hotHost.ctx)
+      stubDecisionsFetch(() =>
+        makeAnswers({
+          risk: 'medium',
+          overrides: {
+            security_change: { type: 'predicate', probability: 0.91 },
+            explicit_authorization: { type: 'predicate', probability: 0.12 },
+          },
+        }),
+      )
+      const session = makeSession('hotload-session')
+      const exec = makeExec(session)
+      const preExecute = hotHost.listeners.get('tools/pre-execute')
+      expect((await preExecute(exec, async () => ({ kind: 'allow' }))).kind).toBe('ask')
+
+      const outcome = await hotHost.waterfall('approval/request', {
+        agent: { session },
+        toolName: 'bash',
+        callId: exec.callId,
+      })
+      expect(outcome).toBe('allowed-once')
+      expect(pendingDuringRemote.pending?.callId).toBe(exec.callId)
+
+      // Cleared immediately after remote answerer returns (before tool execution completes).
+      const pendingRoute = hotHost.routes.get('/api/decision-review/pending')
+      const afterApproval = await (
+        await pendingRoute.fetch(new Request(`${BASE}/pending?session=${session.id}&callId=${exec.callId}`))
+      ).json()
+      expect(afterApproval).toStrictEqual({ pending: null })
+    } finally {
+      await hotHost.dispose()
+      removeDir(hotDir)
+    }
+  })
+
+  test('includes explicit bash workdir in pending action summary and fallback approval prompt', async () => {
+    stubDecisionsFetch(() =>
+      makeAnswers({
+        risk: 'medium',
+        overrides: {
+          production_effect: { type: 'predicate', probability: 0.89 },
+          explicit_authorization: { type: 'predicate', probability: 0.1 },
+        },
+      }),
+    )
+    const preExecute = host.listeners.get('tools/pre-execute')
+    const bashArgs = { command: 'rm -rf ./dist', workdir: '/srv/prod/app' }
+    const rawBashArgs = JSON.stringify(bashArgs)
+    const baseSession = makeSession('bash-workdir')
+    const topEvents = baseSession.snapshotEvents().map((event) => {
+      if (event.type === 'assistant/message') {
+        return {
+          ...event,
+          data: {
+            ...event.data,
+            message: {
+              ...event.data.message,
+              content: event.data.message.content.map((block) =>
+                block.type === 'tool-call' ? { ...block, name: 'bash', arguments: rawBashArgs } : block,
+              ),
+            },
+          },
+        }
+      }
+      if (event.type === 'tool/call') {
+        return { ...event, data: { ...event.data, name: 'bash', arguments: rawBashArgs } }
+      }
+      return event
+    })
+    const topSession = { ...baseSession, snapshotEvents: () => topEvents }
+
+    // Top-level bash with explicit workdir: host natively shows command, fallback adds workdir.
+    const topExec = makeExec(topSession, { arguments: bashArgs })
+    const topDecision = await preExecute(topExec, async () => ({ kind: 'allow' }))
+    expect(topDecision.kind).toBe('ask')
+    expect(topDecision.displayReason.en).toContain('Working directory: /srv/prod/app')
+    expect(topDecision.displayReason.zh).toContain('工作目录：/srv/prod/app')
+    expect(topDecision.displayReason.en).not.toContain('Pending call:')
+
+    let topPending = null
+    await host.waterfall(
+      'approval/request',
+      { agent: { session: topSession }, toolName: 'bash', callId: topExec.callId },
+      async () => {
+        topPending = await (
+          await call('pending', new Request(`${BASE}/pending?session=${topSession.id}&callId=${topExec.callId}`))
+        ).json()
+        return 'rejected'
+      },
+    )
+    expect(topPending.pending.action).toStrictEqual({
+      kind: 'command',
+      workdir: '/srv/prod/app',
+      detail: 'rm -rf ./dist',
+    })
+
+    // PTC inner bash with explicit workdir: fallback includes both command and workdir.
+    const ptcEvents = [
+      ...baseSession.snapshotEvents().map((event) => {
+        if (event.type === 'assistant/message') {
+          return {
+            ...event,
+            data: {
+              ...event.data,
+              message: {
+                ...event.data.message,
+                content: event.data.message.content.map((block) =>
+                  block.type === 'tool-call' ? { ...block, name: 'run_code', arguments: '{"code":"bash()"}' } : block,
+                ),
+              },
+            },
+          }
+        }
+        if (event.type === 'tool/call') {
+          return { ...event, data: { ...event.data, name: 'run_code', arguments: '{"code":"bash()"}' } }
+        }
+        return event
+      }),
+      {
+        seq: 4,
+        type: 'tool/ptc-dispatch-start',
+        data: {
+          parentCallId: 'call-1',
+          rootCallId: 'call-1',
+          subCallId: 'call-ptc-inner',
+          name: 'bash',
+          arguments: bashArgs,
+        },
+      },
+    ]
+    const ptcSession = {
+      ...baseSession,
+      id: 'bash-workdir-ptc',
+      snapshotEvents: () => ptcEvents,
+    }
+    const ptcExec = makeExec(ptcSession, {
+      callId: 'call-ptc-inner',
+      rootCallId: 'call-1',
+      parent: { callId: 'call-1' },
+      arguments: bashArgs,
+      schema: { name: 'bash', description: 'Run a command.', parameters: { type: 'object' } },
+    })
+    const ptcDecision = await preExecute(ptcExec, async () => ({ kind: 'allow' }))
+    expect(ptcDecision.kind).toBe('ask')
+    expect(ptcDecision.displayReason.en).toContain('Pending call: bash rm -rf ./dist\nWorking directory: /srv/prod/app')
+    expect(ptcDecision.displayReason.zh).toContain('待评审的调用：bash rm -rf ./dist\n工作目录：/srv/prod/app')
   })
 
   test('preserves edit old_string, new_string, and replace_all in pending summary and fallback prompt', async () => {
@@ -374,9 +591,17 @@ describe('Connection routes', () => {
     expect(decision.displayReason.en).toContain('edit config/security.yml (delete 18 characters, replace all matches)')
     expect(decision.displayReason.zh).toContain('edit config/security.yml（删除 18 个字符，替换全部匹配）')
 
-    const active = await (
-      await call('pending', new Request(`${BASE}/pending?session=${editSession.id}&callId=${exec.callId}`))
-    ).json()
+    let active = null
+    await host.waterfall(
+      'approval/request',
+      { agent: { session: editSession }, toolName: 'edit', callId: exec.callId },
+      async () => {
+        active = await (
+          await call('pending', new Request(`${BASE}/pending?session=${editSession.id}&callId=${exec.callId}`))
+        ).json()
+        return 'rejected'
+      },
+    )
     expect(active.pending.action).toStrictEqual({
       kind: 'file',
       target: 'config/security.yml',

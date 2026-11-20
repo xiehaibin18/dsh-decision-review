@@ -56,6 +56,7 @@ const APPROVAL_TEXT = {
     fallback: 'the reviewer did not approve this call',
     headline: (body: string) => `Decision Review requests your approval: ${body}`,
     pending: (call: string) => `Pending call: ${call}`,
+    workdir: (dir: string) => `Working directory: ${dir}`,
     length: (length: number) => ` (${length} characters)`,
     editSummary: (oldLen: number, newLen: number, replaceAll: boolean) => {
       const scope = replaceAll ? ', replace all matches' : ''
@@ -67,6 +68,7 @@ const APPROVAL_TEXT = {
     fallback: '评审未放行此调用',
     headline: (body: string) => `决策评审请你决定是否放行：${body}`,
     pending: (call: string) => `待评审的调用：${call}`,
+    workdir: (dir: string) => `工作目录：${dir}`,
     length: (length: number) => `（${length} 个字符）`,
     editSummary: (oldLen: number, newLen: number, replaceAll: boolean) => {
       const scope = replaceAll ? '，替换全部匹配' : ''
@@ -171,6 +173,10 @@ export function denied(exec: ToolExecution, reason?: string): PreToolDecision {
 
 const PENDING_DETAIL_MAX = 1200
 
+function explicitWorkdir(fields: Record<string, unknown>): string | undefined {
+  return typeof fields.workdir === 'string' && fields.workdir.trim() !== '' ? fields.workdir : undefined
+}
+
 /** Extract a structured, display-safe summary of the pending tool action for UI cards. */
 export function summarizePendingAction(exec: ToolExecution): PendingActionSummary {
   const args = exec.arguments && typeof exec.arguments === 'object' ? exec.arguments : {}
@@ -179,7 +185,12 @@ export function summarizePendingAction(exec: ToolExecution): PendingActionSummar
   const name = exec.name
 
   if (name === 'bash' && typeof fields.command === 'string') {
-    return { kind: 'command', detail: clip(fields.command) }
+    const workdir = explicitWorkdir(fields)
+    return {
+      kind: 'command',
+      ...(workdir === undefined ? {} : { workdir: clip(workdir) }),
+      detail: clip(fields.command),
+    }
   }
   if (name === 'write') {
     const target = String(fields.file_path ?? fields.path ?? '?')
@@ -230,10 +241,14 @@ function describePendingLine(exec: ToolExecution, locale: Locale): string {
   const truncate = (value: string) =>
     value.length > 200 ? value.slice(0, 200) + copy.truncated(value.length - 200) : value
   const name = exec.name
-  // Only top-level bash calls are rendered natively by the Chat approval slot;
-  // PTC inner bash calls must include the command in the fallback prompt too.
+  // Top-level bash commands are rendered natively by the Chat approval slot,
+  // but that slot ignores `workdir` and does not render PTC inner bash calls.
   if (name === 'bash' && typeof fields.command === 'string') {
-    return exec.parent === undefined ? '' : copy.pending(`bash ${truncate(fields.command)}`)
+    const workdir = explicitWorkdir(fields)
+    const lines: string[] = []
+    if (exec.parent !== undefined) lines.push(copy.pending(`bash ${truncate(fields.command)}`))
+    if (workdir !== undefined) lines.push(copy.workdir(truncate(workdir)))
+    return lines.join('\n')
   }
   if (name === 'write') {
     const size = typeof fields.content === 'string' ? copy.length(fields.content.length) : ''

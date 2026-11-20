@@ -186,8 +186,12 @@ export function apply(ctx: Context): void {
             return downstream
           }
           record('ask')
-          pendingStore.set(agent.session.id, buildPendingReview(exec, decision, telemetry.answers, settings))
-          exec.signal.addEventListener('abort', () => pendingStore.clear(agent.session.id, exec.callId), { once: true })
+          if (!exec.signal.aborted) {
+            pendingStore.stage(agent.session.id, buildPendingReview(exec, decision, telemetry.answers, settings))
+            exec.signal.addEventListener('abort', () => pendingStore.clear(agent.session.id, exec.callId), {
+              once: true,
+            })
+          }
           return askUser(exec, decision)
         } finally {
           active.delete(completed.promise)
@@ -221,30 +225,44 @@ export function apply(ctx: Context): void {
       { prepend: true },
     )
 
-    // Clear any pending review once the tool pipeline finishes, covering host-side
-    // rejections (such as effective approval policy `never`) that skip `approval/request`.
+    // Drop any staged review if the call finishes without entering `approval/request`
+    // (for example, when the host's effective approval policy is `never`).
     yield ctx.on('tools/result', (exec) => {
       if (exec.agent) pendingStore.clear(exec.agent.session.id, exec.callId)
     })
 
-    // Observe the approval waterfall without answering: each settled ask
-    // feeds the per-session approval stats served to the composer dock chip
-    // and clears any pending review context once the user decides.
-    yield ctx.on('approval/request', async (req, next) => {
-      try {
-        const outcome = await next()
-        trail.record({
-          event: 'approval',
-          session: String(req.agent.session.id).replace(/^session-/, ''),
-          tool: req.toolName,
-          callId: req.callId,
-          outcome,
-        })
-        return outcome
-      } finally {
-        pendingStore.clear(req.agent.session.id, req.callId)
-      }
-    })
+    // Prepend ahead of host/remote approval answerers so a staged review is
+    // published only while the host is actually awaiting approval, withdrawn
+    // immediately when approval settles or aborts, and every settled ask feeds stats.
+    yield ctx.on(
+      'approval/request',
+      async (req, next) => {
+        const callId = req.callId
+        let clearPending: (() => void) | undefined
+        if (callId !== undefined) {
+          clearPending = () => pendingStore.clear(req.agent.session.id, callId)
+          pendingStore.activate(req.agent.session.id, callId)
+          req.signal?.addEventListener('abort', clearPending, { once: true })
+        }
+        try {
+          const outcome = await next()
+          trail.record({
+            event: 'approval',
+            session: String(req.agent.session.id).replace(/^session-/, ''),
+            tool: req.toolName,
+            callId: req.callId,
+            outcome,
+          })
+          return outcome
+        } finally {
+          if (clearPending !== undefined) {
+            req.signal?.removeEventListener('abort', clearPending)
+            clearPending()
+          }
+        }
+      },
+      { prepend: true },
+    )
 
     yield async () => {
       accepting = false

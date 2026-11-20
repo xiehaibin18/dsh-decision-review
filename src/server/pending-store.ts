@@ -82,42 +82,64 @@ export function buildPendingReview(
 }
 
 export interface PendingReviewStore {
-  set(sessionId: string, review: PendingReview): void
-  clear(sessionId: string, callId?: string): void
+  /** Hold a review until the host actually enters `approval/request` for this call. */
+  stage(sessionId: string, review: PendingReview): void
+  /** Publish a previously staged review while `approval/request` is awaiting a decision. */
+  activate(sessionId: string, callId: string): void
+  /** Remove both staged and active entries for one tool call. */
+  clear(sessionId: string, callId: string): void
+  /** Read the currently active (awaiting-approval) review for one tool call, if any. */
   get(sessionId: string, callId: string): PendingReview | null
   clearAll(): void
 }
 
-/** Instance-owned in-memory store of currently pending human-approval reviews, keyed by (session, callId). */
+function putEntry(bySession: Map<string, Map<string, PendingReview>>, sessionKey: string, review: PendingReview): void {
+  let calls = bySession.get(sessionKey)
+  if (!calls) {
+    calls = new Map()
+    bySession.set(sessionKey, calls)
+  }
+  calls.set(review.callId, review)
+}
+
+function deleteEntry(bySession: Map<string, Map<string, PendingReview>>, sessionKey: string, callId: string): void {
+  const calls = bySession.get(sessionKey)
+  if (!calls) return
+  calls.delete(callId)
+  if (calls.size === 0) bySession.delete(sessionKey)
+}
+
+/** Instance-owned in-memory store separating staged reviews from active approval waits. */
 export function createPendingReviewStore(): PendingReviewStore {
-  const bySession = new Map<string, Map<string, PendingReview>>()
+  const stagedBySession = new Map<string, Map<string, PendingReview>>()
+  const activeBySession = new Map<string, Map<string, PendingReview>>()
 
   return {
-    set(sessionId, review) {
+    stage(sessionId, review) {
       const key = normalizeSessionId(sessionId)
-      let calls = bySession.get(key)
-      if (!calls) {
-        calls = new Map()
-        bySession.set(key, calls)
-      }
-      calls.set(review.callId, review)
+      deleteEntry(activeBySession, key, review.callId)
+      putEntry(stagedBySession, key, review)
+    },
+    activate(sessionId, callId) {
+      const key = normalizeSessionId(sessionId)
+      const id = String(callId)
+      const staged = stagedBySession.get(key)?.get(id)
+      if (!staged) return
+      deleteEntry(stagedBySession, key, id)
+      putEntry(activeBySession, key, staged)
     },
     clear(sessionId, callId) {
       const key = normalizeSessionId(sessionId)
-      if (callId === undefined) {
-        bySession.delete(key)
-        return
-      }
-      const calls = bySession.get(key)
-      if (!calls) return
-      calls.delete(String(callId))
-      if (calls.size === 0) bySession.delete(key)
+      const id = String(callId)
+      deleteEntry(stagedBySession, key, id)
+      deleteEntry(activeBySession, key, id)
     },
     get(sessionId, callId) {
-      return bySession.get(normalizeSessionId(sessionId))?.get(String(callId)) ?? null
+      return activeBySession.get(normalizeSessionId(sessionId))?.get(String(callId)) ?? null
     },
     clearAll() {
-      bySession.clear()
+      stagedBySession.clear()
+      activeBySession.clear()
     },
   }
 }

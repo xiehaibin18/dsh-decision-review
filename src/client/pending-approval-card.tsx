@@ -94,7 +94,7 @@ function buildSignalRows(t: Translate, scores: PendingDecisionScores, why: Denia
     const value = predicates[name]
     const isBlamed = (why.code === 'authorization' || why.code === 'conflict') && why.pred === name
     const exceeds = value !== null && value >= medThreshold
-    pushPredicate(name, medThreshold, 'max', isBlamed || exceeds, isBlamed || exceeds)
+    pushPredicate(name, medThreshold, 'max', exceeds, isBlamed || exceeds)
   }
 
   if (riskClass) {
@@ -150,7 +150,7 @@ export function PendingApprovalCard({ t, resolveText, pending }: PendingApproval
   const hasHiddenRows = keyRows.length > 0 && keyRows.length < allRows.length
   const actionKindLabel = t(`approval.action.${pending.action.kind}`)
   const edit = pending.action.edit
-  const hasActionBody = Boolean(pending.action.target || pending.action.detail || edit)
+  const hasActionBody = Boolean(pending.action.target || pending.action.workdir || pending.action.detail || edit)
 
   return (
     <section
@@ -229,6 +229,12 @@ export function PendingApprovalCard({ t, resolveText, pending }: PendingApproval
                 )}
               </div>
               {pending.action.target && <div className="decision-review-approval-target">{pending.action.target}</div>}
+              {pending.action.workdir && (
+                <div className="decision-review-approval-workdir">
+                  <span className="decision-review-approval-workdir-label">{t('approval.action.workdir')}</span>
+                  <code className="decision-review-approval-workdir-path">{pending.action.workdir}</code>
+                </div>
+              )}
               {edit && (
                 <div className="decision-review-approval-edit">
                   {edit.oldText !== undefined && (

@@ -165,6 +165,7 @@ export interface PendingEditPreview {
 export interface PendingActionSummary {
   kind: 'command' | 'file' | 'url' | 'search' | 'mcp' | 'tool'
   target?: string
+  workdir?: string
   detail?: string
   edit?: PendingEditPreview
   meta?: { chars?: number }
