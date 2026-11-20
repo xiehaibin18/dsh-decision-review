@@ -4,6 +4,7 @@ import {
   API_BASE,
   TEST_SCENARIO_NAMES,
   type ConfigResponse,
+  type PendingReviewResponse,
   type SaveResponse,
   type SettingsIssue,
   type TestResponse,
@@ -12,6 +13,7 @@ import {
 } from '../shared/contracts.js'
 import { decisionsBody, decisionsMessages, requestDecisions, toComposeInput } from './decisions-engine.js'
 import { errorCode, isRecord } from './json.js'
+import type { PendingReviewStore } from './pending-store.js'
 import { localizedWhy } from './review-outcome.js'
 import {
   mergeSettingsUpdate,
@@ -207,6 +209,7 @@ export function reviewRoutes(
   trail: ReturnType<typeof createReviewTrail>,
   runtime: () => Pick<ConfigResponse['runtime'], 'accepting' | 'active'>,
   lifecycle: AbortController,
+  pendingStore?: PendingReviewStore,
 ): ReviewRoute[] {
   /* Settings, stats and smoke-test routes. They are mounted through the host
    * Connection (see the end of apply), which authenticates every request;
@@ -250,6 +253,15 @@ export function reviewRoutes(
         const session = new URL(request.url).searchParams.get('session')
         if (!session) throw new RequestError(400, 'missing session')
         return jsonResponse(trail.stats(session))
+      },
+    },
+    {
+      path: `${API_BASE}/pending`,
+      methods: ['GET'],
+      handle: async (request) => {
+        const session = new URL(request.url).searchParams.get('session')
+        if (!session) throw new RequestError(400, 'missing session')
+        return jsonResponse({ pending: pendingStore?.get(session) ?? null } satisfies PendingReviewResponse)
       },
     },
     {

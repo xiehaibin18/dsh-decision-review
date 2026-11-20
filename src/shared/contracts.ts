@@ -153,3 +153,34 @@ export interface TestResponse {
   ok: true
   results: TestResult[]
 }
+
+export interface PendingActionSummary {
+  kind: 'command' | 'file' | 'url' | 'search' | 'mcp' | 'tool'
+  target?: string
+  detail?: string
+  meta?: { chars?: number }
+}
+
+export interface PendingDecisionScores {
+  riskClass: { choice: Risk; confidence: number } | null
+  predicates: Record<PredicateName, number | null>
+  refused: string[]
+  thresholds: Record<Threshold, number>
+}
+
+export interface PendingReview {
+  callId: string
+  tool: string
+  isPtcInner: boolean
+  engine: ReviewEngine
+  risk: Risk
+  why: DenialExplanation
+  display: { en: string; zh: string }
+  action: PendingActionSummary
+  scores: PendingDecisionScores | null
+  createdAt: number
+}
+
+export interface PendingReviewResponse {
+  pending: PendingReview | null
+}

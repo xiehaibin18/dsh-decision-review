@@ -1,5 +1,5 @@
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
-import type { DenialExplanation, PredicateName, ReviewDecision } from '../shared/contracts.js'
+import type { DenialExplanation, PendingActionSummary, PredicateName, ReviewDecision } from '../shared/contracts.js'
 import { isRecord } from './json.js'
 
 type Locale = 'en' | 'zh'
@@ -161,8 +161,50 @@ export function denied(exec: ToolExecution, reason?: string): PreToolDecision {
   }
 }
 
+const PENDING_DETAIL_MAX = 1200
+
+/** Extract a structured, display-safe summary of the pending tool action for UI cards. */
+export function summarizePendingAction(exec: ToolExecution): PendingActionSummary {
+  const args = exec.arguments && typeof exec.arguments === 'object' ? exec.arguments : {}
+  const fields = isRecord(args) ? args : {}
+  const clip = (value: string) => (value.length > PENDING_DETAIL_MAX ? `${value.slice(0, PENDING_DETAIL_MAX)}…` : value)
+  const name = exec.name
+
+  if (name === 'bash' && typeof fields.command === 'string') {
+    return { kind: 'command', detail: clip(fields.command) }
+  }
+  if (name === 'write' || name === 'edit') {
+    const target = String(fields.file_path ?? fields.path ?? '?')
+    const content =
+      typeof fields.content === 'string'
+        ? fields.content
+        : typeof fields.new_string === 'string'
+          ? fields.new_string
+          : undefined
+    return {
+      kind: 'file',
+      target,
+      ...(content === undefined ? {} : { detail: clip(content), meta: { chars: content.length } }),
+    }
+  }
+  if (name === 'web_fetch' && typeof fields.url === 'string') {
+    return { kind: 'url', target: clip(fields.url) }
+  }
+  if (name === 'web_search' && Array.isArray(fields.queries)) {
+    return { kind: 'search', detail: clip(fields.queries.join(' | ')) }
+  }
+  if (name.startsWith('mcp__')) {
+    const parts = name.split('__')
+    const target = `${parts[1] ?? '?'}/${parts.slice(2).join('__')}`
+    const rendered = JSON.stringify(args, null, 2)
+    return { kind: 'mcp', target, ...(rendered && rendered !== '{}' ? { detail: clip(rendered) } : {}) }
+  }
+  const rendered = JSON.stringify(args, null, 2)
+  return { kind: 'tool', target: name, ...(rendered && rendered !== '{}' ? { detail: clip(rendered) } : {}) }
+}
+
 /** Compact localized pending-call line for tools whose card detail the Chat
- * approval slot cannot draw (it renders only bash command arguments). */
+ * approval slot cannot draw (it renders only top-level bash command arguments). */
 function describePendingLine(exec: ToolExecution, locale: Locale): string {
   const args = exec.arguments && typeof exec.arguments === 'object' ? exec.arguments : {}
   const fields = isRecord(args) ? args : {}
@@ -170,7 +212,11 @@ function describePendingLine(exec: ToolExecution, locale: Locale): string {
   const truncate = (value: string) =>
     value.length > 200 ? value.slice(0, 200) + copy.truncated(value.length - 200) : value
   const name = exec.name
-  if (name === 'bash' && typeof fields.command === 'string') return '' // the card draws the command itself
+  // Only top-level bash calls are rendered natively by the Chat approval slot;
+  // PTC inner bash calls must include the command in the fallback prompt too.
+  if (name === 'bash' && typeof fields.command === 'string') {
+    return exec.parent === undefined ? '' : copy.pending(`bash ${truncate(fields.command)}`)
+  }
   if (name === 'write' || name === 'edit') {
     const size = typeof fields.content === 'string' ? copy.length(fields.content.length) : ''
     return copy.pending(`${name} ${fields.file_path ?? fields.path ?? '?'}${size}`)

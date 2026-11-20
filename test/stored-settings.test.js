@@ -83,7 +83,7 @@ describe('invalid stored settings', () => {
 
   test('still loads, mounts the configuration routes and says what is wrong', async () => {
     start({ apiKey: SECRET, tConf: 1.1 })
-    expect(host.routes.size).toBe(4)
+    expect(host.routes.size).toBe(5)
     expect(host.listeners.has('tools/pre-execute')).toBe(true)
     const payload = await configuration()
     expect(payload).toMatchObject({

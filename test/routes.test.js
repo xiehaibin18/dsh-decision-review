@@ -5,8 +5,10 @@ import { apply } from '../dist/index.js'
 import {
   jsonRequest,
   makeAnswers,
+  makeExec,
   makeHost,
   makeProfileDir,
+  makeSession,
   removeDir,
   silenceConsole,
   stubDecisionsFetch,
@@ -64,6 +66,7 @@ describe('Connection routes', () => {
       '/api/decision-review/config': ['GET'],
       '/api/decision-review/save': ['POST'],
       '/api/decision-review/stats': ['GET'],
+      '/api/decision-review/pending': ['GET'],
       '/api/decision-review/test': ['POST'],
     })
     for (const route of host.routes.values()) expect(route.requestBody).toBe('buffered')
@@ -235,5 +238,58 @@ describe('Connection routes', () => {
       expect(composed.display.en).not.toMatch(/requests your approval/)
       expect(composed.display.zh).not.toMatch(/请你确认/)
     })
+  })
+
+  test('returns pending review context with no-store and requires a session parameter', async () => {
+    const missing = await call('pending', new Request(`${BASE}/pending`))
+    expect(missing.status).toBe(400)
+    const empty = await call('pending', new Request(`${BASE}/pending?session=session-abc`))
+    expect(empty.status).toBe(200)
+    expect(empty.headers.get('cache-control')).toBe('no-store')
+    await expect(empty.json()).resolves.toStrictEqual({ pending: null })
+  })
+
+  test('publishes pending review context on ask and clears it when approval settles or aborts', async () => {
+    stubDecisionsFetch(() =>
+      makeAnswers({
+        risk: 'medium',
+        overrides: {
+          security_change: { type: 'predicate', probability: 0.91 },
+          explicit_authorization: { type: 'predicate', probability: 0.12 },
+        },
+      }),
+    )
+    const session = makeSession('pending-life')
+    const exec = makeExec(session)
+    const preExecute = host.listeners.get('tools/pre-execute')
+    const decision = await preExecute(exec, async () => ({ kind: 'allow' }))
+    expect(decision.kind).toBe('ask')
+
+    const active = await (await call('pending', new Request(`${BASE}/pending?session=session-${session.id}`))).json()
+    expect(active.pending).toMatchObject({
+      callId: exec.callId,
+      tool: 'bash',
+      isPtcInner: false,
+      risk: 'medium',
+      action: { kind: 'command', detail: 'npm test' },
+      scores: {
+        predicates: { security_change: 0.91, explicit_authorization: 0.12 },
+      },
+    })
+
+    const approvalListener = host.listeners.get('approval/request')
+    await approvalListener({ agent: { session }, toolName: 'bash', callId: exec.callId }, async () => 'allowed-once')
+    const settled = await (await call('pending', new Request(`${BASE}/pending?session=${session.id}`))).json()
+    expect(settled).toStrictEqual({ pending: null })
+
+    // Aborting the execution signal before approval settles also clears the pending record.
+    const abortController = new AbortController()
+    const abortedExec = makeExec(session, { signal: abortController.signal })
+    await preExecute(abortedExec, async () => ({ kind: 'allow' }))
+    const beforeAbort = await (await call('pending', new Request(`${BASE}/pending?session=${session.id}`))).json()
+    expect(beforeAbort.pending?.callId).toBe(abortedExec.callId)
+    abortController.abort()
+    const afterAbort = await (await call('pending', new Request(`${BASE}/pending?session=${session.id}`))).json()
+    expect(afterAbort).toStrictEqual({ pending: null })
   })
 })

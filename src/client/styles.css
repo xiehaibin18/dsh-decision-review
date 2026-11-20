@@ -361,7 +361,6 @@
   gap: 10px;
   padding: 12px 14px 14px;
   border: 1px solid var(--decision-review-border);
-  border-inline-start: 3px solid var(--decision-review-rule-accent);
   border-radius: var(--decision-review-radius);
   background: var(--decision-review-rule-card-fill);
   transition:
@@ -388,7 +387,6 @@
 
 .decision-review-rule:focus-within {
   border-color: var(--decision-review-focus);
-  border-inline-start-color: var(--decision-review-rule-accent);
   background: color-mix(in srgb, var(--decision-review-focus) 5%, var(--decision-review-rule-card-fill));
 }
 
@@ -1075,4 +1073,345 @@
   margin: 0;
   text-align: end;
   font-variant-numeric: tabular-nums;
+}
+
+/* Companion pending-approval card portaled directly above the host approval card inside [data-composer-seat]. */
+.decision-review-approval-anchor {
+  display: none;
+}
+
+.decision-review-approval-slot {
+  order: -1;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0 16px 8px;
+}
+
+.decision-review-approval-card {
+  --decision-review-approval-border: var(--dsw-alias-settings-card-stroke, var(--dsw-alias-border-l4, #8885));
+  --decision-review-approval-divider: color-mix(in srgb, var(--decision-review-approval-border) 72%, transparent);
+  --decision-review-approval-surface: var(--dsw-alias-bg-layer-3, Canvas);
+  --decision-review-approval-subtle: color-mix(in srgb, currentColor 3.5%, var(--decision-review-approval-surface));
+  --decision-review-approval-muted: var(--dsw-alias-label-secondary, GrayText);
+  --decision-review-approval-text: var(--dsw-alias-label-primary, CanvasText);
+  --decision-review-approval-focus: var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary, #365cda));
+  --decision-review-approval-error: var(--dsw-alias-state-error-primary, #b52d28);
+  --decision-review-approval-warn: color-mix(in srgb, #d97706 86%, var(--decision-review-approval-text));
+  --decision-review-approval-accent: var(--decision-review-approval-focus);
+
+  box-sizing: border-box;
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  max-width: clamp(712px, calc(64% + 32px), 952px);
+  margin: 0 auto;
+  padding: 12px 14px;
+  border: 1px solid var(--decision-review-approval-border);
+  border-radius: 12px;
+  background: var(--decision-review-approval-surface);
+  box-shadow: 0 2px 12px color-mix(in srgb, #000 8%, transparent);
+  color: var(--decision-review-approval-text);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.decision-review-approval-card[data-risk='medium'] {
+  --decision-review-approval-accent: var(--decision-review-approval-warn);
+}
+
+.decision-review-approval-card[data-risk='high'] {
+  --decision-review-approval-accent: var(--decision-review-approval-error);
+}
+
+.decision-review-approval-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.decision-review-approval-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.decision-review-approval-shield {
+  flex: none;
+  color: var(--decision-review-approval-accent);
+}
+
+.decision-review-approval-brand {
+  font-weight: 600;
+}
+
+.decision-review-approval-risk {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--decision-review-approval-accent) 38%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--decision-review-approval-accent) 11%, var(--decision-review-approval-surface));
+  color: var(--decision-review-approval-accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.decision-review-approval-tool {
+  padding: 1px 6px;
+  border: 1px solid var(--decision-review-approval-divider);
+  border-radius: 5px;
+  background: var(--decision-review-approval-subtle);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.decision-review-approval-ptc {
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--decision-review-approval-focus) 34%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--decision-review-approval-focus) 9%, var(--decision-review-approval-surface));
+  color: var(--decision-review-approval-focus);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.decision-review-approval-toggle,
+.decision-review-approval-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--decision-review-approval-muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.decision-review-approval-toggle:hover,
+.decision-review-approval-more:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  color: var(--decision-review-approval-text);
+}
+
+.decision-review-approval-toggle:focus-visible,
+.decision-review-approval-more:focus-visible {
+  outline: 2px solid var(--decision-review-approval-focus);
+  outline-offset: 1px;
+}
+
+.decision-review-approval-chevron {
+  transition: transform 140ms ease;
+}
+
+.decision-review-approval-card[data-collapsed] .decision-review-approval-chevron {
+  transform: rotate(-90deg);
+}
+
+.decision-review-approval-compact {
+  margin: 0;
+  color: var(--decision-review-approval-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.decision-review-approval-body {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  max-height: min(40vh, 320px);
+  overflow-y: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--decision-review-approval-divider);
+}
+
+.decision-review-approval-block {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.decision-review-approval-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.decision-review-approval-block-title {
+  color: var(--decision-review-approval-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.decision-review-approval-kind {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--decision-review-approval-subtle);
+  color: var(--decision-review-approval-muted);
+  font-size: 11px;
+}
+
+.decision-review-approval-meta {
+  color: var(--decision-review-approval-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.decision-review-approval-more {
+  margin-inline-start: auto;
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+.decision-review-approval-target {
+  padding: 5px 9px;
+  border: 1px solid var(--decision-review-approval-divider);
+  border-radius: 7px;
+  background: var(--decision-review-approval-subtle);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.decision-review-approval-code {
+  margin: 0;
+  max-height: 110px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--decision-review-approval-divider);
+  border-radius: 8px;
+  background: var(--decision-review-approval-subtle);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.decision-review-approval-reason {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.decision-review-approval-rule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--decision-review-approval-accent) 28%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--decision-review-approval-accent) 7%, var(--decision-review-approval-surface));
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.decision-review-approval-rule-tag {
+  flex: none;
+  color: var(--decision-review-approval-accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.decision-review-approval-rule-text {
+  white-space: pre-wrap;
+}
+
+.decision-review-approval-signals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 8px 14px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--decision-review-approval-divider);
+  border-radius: 8px;
+  background: var(--decision-review-approval-subtle);
+}
+
+.decision-review-approval-signal {
+  --decision-review-signal-color: var(--decision-review-approval-focus);
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.decision-review-approval-signal[data-tone='warn'] {
+  --decision-review-signal-color: var(--decision-review-approval-warn);
+}
+
+.decision-review-approval-signal[data-tone='error'] {
+  --decision-review-signal-color: var(--decision-review-approval-error);
+}
+
+.decision-review-approval-signal-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.decision-review-approval-signal-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.decision-review-approval-signal-value {
+  flex: none;
+  color: var(--decision-review-signal-color);
+  white-space: nowrap;
+}
+
+.decision-review-approval-signal[data-tone='normal'] .decision-review-approval-signal-value {
+  color: var(--decision-review-approval-muted);
+}
+
+.decision-review-approval-signal-limit {
+  color: var(--decision-review-approval-muted);
+  font-weight: 400;
+}
+
+.decision-review-approval-meter {
+  position: relative;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--decision-review-approval-muted) 22%, var(--decision-review-approval-surface));
+}
+
+.decision-review-approval-meter-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--decision-review-signal-color);
+}
+
+.decision-review-approval-meter-mark {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--decision-review-approval-text);
+  opacity: 0.55;
+  transform: translateX(-50%);
 }

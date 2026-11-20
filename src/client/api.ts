@@ -2,6 +2,8 @@ import {
   API_BASE,
   SETTINGS_ISSUE_CODES,
   type ConfigResponse,
+  type PendingReview,
+  type PendingReviewResponse,
   type ReviewStats,
   type SaveResponse,
   type SettingsIssue,
@@ -14,6 +16,7 @@ export interface ReviewApi {
   saveSettings(settings: SettingsUpdate, signal: AbortSignal): Promise<SaveResponse>
   runSmokeTest(signal: AbortSignal): Promise<TestResponse>
   getStats(sessionId: string, signal: AbortSignal): Promise<ReviewStats | null>
+  getPending(sessionId: string, signal: AbortSignal): Promise<PendingReview | null>
 }
 
 type ApiErrorKey = 'load.error' | 'save.error' | 'test.error'
@@ -36,6 +39,13 @@ export function createReviewApi(base = API_BASE): ReviewApi {
       const res = await fetch(base + '/stats?session=' + encodeURIComponent(id), { signal })
       if (!res.ok) throw new Error('HTTP ' + res.status)
       return res.json()
+    },
+    async getPending(sessionId, signal) {
+      const id = sessionId.replace(/^session-/, '')
+      const res = await fetch(base + '/pending?session=' + encodeURIComponent(id), { signal })
+      if (!res.ok) throw new Error('HTTP ' + res.status)
+      const payload = (await res.json()) as PendingReviewResponse
+      return payload?.pending ?? null
     },
   }
 }
