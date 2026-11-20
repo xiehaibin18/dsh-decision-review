@@ -1,6 +1,6 @@
 # Bun 独立开发预览
 
-预览用于日常插件界面开发，与 DSH 使用同一套业务组件、样式和中英文文案。固定工具链为 npm `bun@1.4.3-canary.20261021.1` 对应的 binary `1.4.4-canary.1`、revision `963452075e9d7e2a47a482f297143af5ed4f76c0`。生产插件的宿主和 Node 版本见[开发指引](development.md)。
+预览用于日常插件界面开发，与 DSH 使用同一套业务组件、样式和中英文文案。工具链最低要求为 Bun `1.4.4-canary.1`（CI 基线为 npm `bun@1.4.3-canary.20261021.1`，对应 binary `1.4.4-canary.1+963452075`）。生产插件的宿主和 Node 版本见[开发指引](development.md)。
 
 ## 启动与操作
 

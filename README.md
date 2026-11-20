@@ -98,7 +98,7 @@ dsh plugin --profile YOUR_PROFILE add ./dist --offline --ignore-scripts
 
 You can also copy `dist/` to a stable location and install it from there without the source checkout or Bun. Keep that directory in place after installation because DSH links local directories. For a portable single file, `bun run pack` archives the same package as `artifacts/local-decision-review-0.1.0.tgz`, which DSH accepts in place of `./dist`.
 
-Development is pinned to Bun `1.4.4-canary.1+963452075` for native formatting, type checking, lint and `bun:test`. Its immutable npm distribution is `bun@1.4.3-canary.20261021.1`; the version labels differ, so scripts check the full binary revision. See the [development guide](https://github.com/xiehaibin18/dsh-decision-review/blob/main/docs/development.md) for isolated toolchain setup, source/output boundaries, commands, and local installation.
+Development requires Bun `>=1.4.4-canary.1` for native formatting, type checking, lint and `bun:test`. CI pins the baseline npm distribution `bun@1.4.3-canary.20261021.1` (binary `1.4.4-canary.1+963452075`) for reproducibility, while local workflows accept any newer Bun version that meets the minimum. See the [development guide](https://github.com/xiehaibin18/dsh-decision-review/blob/main/docs/development.md) for isolated toolchain setup, source/output boundaries, commands, and local installation.
 
 ```sh
 bun install --frozen-lockfile

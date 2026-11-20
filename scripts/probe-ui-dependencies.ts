@@ -9,9 +9,9 @@ import { gzipSync } from 'node:zlib'
 import project_manifest from '../package.json' with { type: 'json' }
 import base_config from '../tsconfig.json' with { type: 'json' }
 import client_config from '../tsconfig.client.json' with { type: 'json' }
+import { assertSupportedBun } from './toolchain.js'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
-const EXPECTED_BUN_REVISION = '963452075e9d7e2a47a482f297143af5ed4f76c0'
 const BASELINE_CLIENT = 'artifacts/ui-evaluation/baseline/client.js'
 const PRODUCTION_BUILDER = 'scripts/build.ts'
 const PLUGIN_EXTERNALS = ['react', 'react/jsx-runtime']
@@ -285,8 +285,8 @@ async function measure_bundle(staging: string, externals: string[]) {
 
 async function run_probe() {
   const revision = run_bun(root, ['-p', 'Bun.revision']).trim()
-  if (revision !== EXPECTED_BUN_REVISION)
-    throw new Error(`Expected Bun revision ${EXPECTED_BUN_REVISION}; got ${revision}`)
+  const version = run_bun(root, ['--revision']).trim()
+  assertSupportedBun({ version, revision })
   const baseline = await read_native_baseline()
   const lock_text = pinned_lock()
   const lock: ProbeLock = JSON.parse(lock_text)

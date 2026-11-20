@@ -18,7 +18,7 @@ Route product copy, including errors and accessibility labels, through bilingual
 
 ## Toolchain & Verification
 
-Use the fixed Bun revision in [development](docs/development.md#固定工具链); production remains Node-hosted. `package.json` defines commands; read documented side effects first.
+Use Bun `>=1.4.4-canary.1` as documented in [development](docs/development.md#工具链要求) (CI pins the baseline canary); production remains Node-hosted. `package.json` defines commands; read documented side effects first.
 
 ```sh
 bun install --frozen-lockfile
