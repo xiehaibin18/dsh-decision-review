@@ -84,27 +84,37 @@ export function buildPendingReview(
 export interface PendingReviewStore {
   set(sessionId: string, review: PendingReview): void
   clear(sessionId: string, callId?: string): void
-  get(sessionId: string): PendingReview | null
+  get(sessionId: string, callId: string): PendingReview | null
   clearAll(): void
 }
 
-/** Instance-owned in-memory store of currently pending human-approval reviews, keyed by session. */
+/** Instance-owned in-memory store of currently pending human-approval reviews, keyed by (session, callId). */
 export function createPendingReviewStore(): PendingReviewStore {
-  const bySession = new Map<string, PendingReview>()
+  const bySession = new Map<string, Map<string, PendingReview>>()
 
   return {
     set(sessionId, review) {
-      bySession.set(normalizeSessionId(sessionId), review)
+      const key = normalizeSessionId(sessionId)
+      let calls = bySession.get(key)
+      if (!calls) {
+        calls = new Map()
+        bySession.set(key, calls)
+      }
+      calls.set(review.callId, review)
     },
     clear(sessionId, callId) {
       const key = normalizeSessionId(sessionId)
-      const current = bySession.get(key)
-      if (!current) return
-      if (callId !== undefined && current.callId !== String(callId)) return
-      bySession.delete(key)
+      if (callId === undefined) {
+        bySession.delete(key)
+        return
+      }
+      const calls = bySession.get(key)
+      if (!calls) return
+      calls.delete(String(callId))
+      if (calls.size === 0) bySession.delete(key)
     },
-    get(sessionId) {
-      return bySession.get(normalizeSessionId(sessionId)) ?? null
+    get(sessionId, callId) {
+      return bySession.get(normalizeSessionId(sessionId))?.get(String(callId)) ?? null
     },
     clearAll() {
       bySession.clear()

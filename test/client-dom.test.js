@@ -346,10 +346,10 @@ describe('composer approval stats pill', () => {
   })
 
   test.serial(
-    'portals the pending approval context card into [data-composer-seat] while awaiting approval',
+    'portals the pending approval context card into [data-composer-seat] with strict callId binding',
     async () => {
       await openClient()
-      const pendingReview = {
+      const pendingA = {
         callId: 'call-dom-1',
         tool: 'bash',
         isPtcInner: true,
@@ -373,8 +373,50 @@ describe('composer approval stats pill', () => {
         },
         createdAt: 1732150000000,
       }
+      const pendingB = {
+        callId: 'call-dom-2',
+        tool: 'edit',
+        isPtcInner: false,
+        engine: 'decisions',
+        risk: 'medium',
+        why: { code: 'conflict', confidence: 0.6, pred: 'security_change', value: 0.7 },
+        display: {
+          en: 'classified as low risk (confidence 0.6), but security change reaches 0.7',
+          zh: '分类为低风险（置信度 0.6），但安全敏感变更达到 0.7',
+        },
+        action: {
+          kind: 'file',
+          target: 'config/security.yml',
+          edit: { oldText: 'require_mfa: true', oldChars: 17, newText: '', newChars: 0, replaceAll: true },
+        },
+        scores: {
+          riskClass: { choice: 'low', confidence: 0.6 },
+          predicates: {
+            exfiltration: 0.01,
+            irreversible_deletion: 0.02,
+            production_effect: 0.05,
+            security_change: 0.7,
+            session_created_cleanup: 0.0,
+            explicit_authorization: 0.2,
+          },
+          refused: [],
+          // tMedPred > tStrongPred: effective medium threshold under low confidence must be min(0.6, 0.9) = 0.6.
+          thresholds: { tConf: 0.75, tHighPred: 0.85, tMedPred: 0.9, tStrongPred: 0.6, tAuth: 0.7 },
+        },
+        createdAt: 1732150001000,
+      }
+
+      let nextPendingGate
       fetchStats.mockImplementation(async (url) => {
-        if (url.startsWith('/api/decision-review/pending?')) return Response.json({ pending: pendingReview })
+        if (url.startsWith('/api/decision-review/pending?')) {
+          if (url.includes('callId=call-dom-1')) return Response.json({ pending: pendingA })
+          if (url.includes('callId=call-dom-2')) {
+            if (nextPendingGate) await nextPendingGate
+            return Response.json({ pending: pendingB })
+          }
+          if (url.includes('callId=call-mismatch')) return Response.json({ pending: pendingA })
+          return Response.json({ pending: null })
+        }
         return statsResponse()
       })
 
@@ -384,7 +426,7 @@ describe('composer approval stats pill', () => {
       client.container.parentElement.appendChild(seat)
       seat.appendChild(client.container)
 
-      let activeInteraction = { key: 'approval-1', kind: 'approval', sessionId: 'session-ptc' }
+      let activeInteraction = { key: 'approval-1', kind: 'approval', sessionId: 'session-ptc', callId: 'call-dom-1' }
       const useSessionStatus = (selector) => {
         const map = new Map([
           ['session-ptc', { running: true, completionUnread: false, pendingInteraction: activeInteraction }],
@@ -406,7 +448,37 @@ describe('composer approval stats pill', () => {
       await act(async () => toggle.click())
       expect(approvalCard.querySelector('.decision-review-approval-code')).not.toBeNull()
 
-      // Clearing the pending interaction unmounts the portaled card cleanly.
+      // Switching from approval A to B immediately clears A's card while B's response is still in flight.
+      const gate = Promise.withResolvers()
+      nextPendingGate = gate.promise
+      try {
+        activeInteraction = { key: 'approval-2', kind: 'approval', sessionId: 'session-ptc', callId: 'call-dom-2' }
+        await client.render(STATS_SLOT, { sessionId: 'session-ptc', useSessionStatus })
+        expect(seat.querySelector('.decision-review-approval-card')).toBeNull()
+      } finally {
+        await act(async () => gate.resolve())
+      }
+
+      // Once B loads, it renders edit old_string, empty deletion notice, replace_all scope, and effective threshold 0.6.
+      const cardB = seat.querySelector('.decision-review-approval-card')
+      expect(cardB).not.toBeNull()
+      expect(cardB.textContent).toContain('Replace all matches')
+      expect(cardB.textContent).toContain('require_mfa: true')
+      expect(cardB.textContent).toContain('Delete matched text (empty replacement)')
+      expect(cardB.textContent).toContain('limit 0.6')
+      expect(cardB.textContent).not.toContain('limit 0.9')
+
+      // A mismatched callId response from the server is rejected and renders nothing.
+      activeInteraction = { key: 'approval-3', kind: 'approval', sessionId: 'session-ptc', callId: 'call-mismatch' }
+      await client.render(STATS_SLOT, { sessionId: 'session-ptc', useSessionStatus })
+      expect(seat.querySelector('.decision-review-approval-card')).toBeNull()
+
+      // Missing callId renders nothing without reusing any prior card.
+      activeInteraction = { key: 'approval-4', kind: 'approval', sessionId: 'session-ptc' }
+      await client.render(STATS_SLOT, { sessionId: 'session-ptc', useSessionStatus })
+      expect(seat.querySelector('.decision-review-approval-card')).toBeNull()
+
+      // Clearing the pending interaction unmounts cleanly.
       activeInteraction = undefined
       await client.render(STATS_SLOT, { sessionId: 'session-ptc', useSessionStatus })
       expect(seat.querySelector('.decision-review-approval-card')).toBeNull()

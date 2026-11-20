@@ -16,7 +16,7 @@ export interface ReviewApi {
   saveSettings(settings: SettingsUpdate, signal: AbortSignal): Promise<SaveResponse>
   runSmokeTest(signal: AbortSignal): Promise<TestResponse>
   getStats(sessionId: string, signal: AbortSignal): Promise<ReviewStats | null>
-  getPending(sessionId: string, signal: AbortSignal): Promise<PendingReview | null>
+  getPending(sessionId: string, callId: string, signal: AbortSignal): Promise<PendingReview | null>
 }
 
 type ApiErrorKey = 'load.error' | 'save.error' | 'test.error'
@@ -40,9 +40,12 @@ export function createReviewApi(base = API_BASE): ReviewApi {
       if (!res.ok) throw new Error('HTTP ' + res.status)
       return res.json()
     },
-    async getPending(sessionId, signal) {
+    async getPending(sessionId, callId, signal) {
       const id = sessionId.replace(/^session-/, '')
-      const res = await fetch(base + '/pending?session=' + encodeURIComponent(id), { signal })
+      const res = await fetch(
+        `${base}/pending?session=${encodeURIComponent(id)}&callId=${encodeURIComponent(callId)}`,
+        { signal },
+      )
       if (!res.ok) throw new Error('HTTP ' + res.status)
       const payload = (await res.json()) as PendingReviewResponse
       return payload?.pending ?? null

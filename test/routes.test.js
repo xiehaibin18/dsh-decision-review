@@ -240,16 +240,19 @@ describe('Connection routes', () => {
     })
   })
 
-  test('returns pending review context with no-store and requires a session parameter', async () => {
+  test('returns pending review context with no-store and requires session and matching callId', async () => {
     const missing = await call('pending', new Request(`${BASE}/pending`))
     expect(missing.status).toBe(400)
-    const empty = await call('pending', new Request(`${BASE}/pending?session=session-abc`))
+    const missingCall = await call('pending', new Request(`${BASE}/pending?session=session-abc`))
+    expect(missingCall.status).toBe(200)
+    expect(missingCall.headers.get('cache-control')).toBe('no-store')
+    await expect(missingCall.json()).resolves.toStrictEqual({ pending: null })
+    const empty = await call('pending', new Request(`${BASE}/pending?session=session-abc&callId=c1`))
     expect(empty.status).toBe(200)
-    expect(empty.headers.get('cache-control')).toBe('no-store')
     await expect(empty.json()).resolves.toStrictEqual({ pending: null })
   })
 
-  test('publishes pending review context on ask and clears it when approval settles or aborts', async () => {
+  test('publishes pending review context per callId and clears it on approval, tools/result, or abort', async () => {
     stubDecisionsFetch(() =>
       makeAnswers({
         risk: 'medium',
@@ -265,7 +268,14 @@ describe('Connection routes', () => {
     const decision = await preExecute(exec, async () => ({ kind: 'allow' }))
     expect(decision.kind).toBe('ask')
 
-    const active = await (await call('pending', new Request(`${BASE}/pending?session=session-${session.id}`))).json()
+    const mismatched = await (
+      await call('pending', new Request(`${BASE}/pending?session=session-${session.id}&callId=other-call`))
+    ).json()
+    expect(mismatched).toStrictEqual({ pending: null })
+
+    const active = await (
+      await call('pending', new Request(`${BASE}/pending?session=session-${session.id}&callId=${exec.callId}`))
+    ).json()
     expect(active.pending).toMatchObject({
       callId: exec.callId,
       tool: 'bash',
@@ -279,17 +289,104 @@ describe('Connection routes', () => {
 
     const approvalListener = host.listeners.get('approval/request')
     await approvalListener({ agent: { session }, toolName: 'bash', callId: exec.callId }, async () => 'allowed-once')
-    const settled = await (await call('pending', new Request(`${BASE}/pending?session=${session.id}`))).json()
+    const settled = await (
+      await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${exec.callId}`))
+    ).json()
     expect(settled).toStrictEqual({ pending: null })
+
+    // When host effective approval policy is `never`, `approval/request` is skipped and `tools/result` closes the call.
+    await preExecute(exec, async () => ({ kind: 'allow' }))
+    const beforeResult = await (
+      await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${exec.callId}`))
+    ).json()
+    expect(beforeResult.pending?.callId).toBe(exec.callId)
+    await host.emit('tools/result', exec, { isError: true, content: 'rejected' })
+    const afterResult = await (
+      await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${exec.callId}`))
+    ).json()
+    expect(afterResult).toStrictEqual({ pending: null })
 
     // Aborting the execution signal before approval settles also clears the pending record.
     const abortController = new AbortController()
     const abortedExec = makeExec(session, { signal: abortController.signal })
     await preExecute(abortedExec, async () => ({ kind: 'allow' }))
-    const beforeAbort = await (await call('pending', new Request(`${BASE}/pending?session=${session.id}`))).json()
+    const beforeAbort = await (
+      await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${abortedExec.callId}`))
+    ).json()
     expect(beforeAbort.pending?.callId).toBe(abortedExec.callId)
     abortController.abort()
-    const afterAbort = await (await call('pending', new Request(`${BASE}/pending?session=${session.id}`))).json()
+    const afterAbort = await (
+      await call('pending', new Request(`${BASE}/pending?session=${session.id}&callId=${abortedExec.callId}`))
+    ).json()
     expect(afterAbort).toStrictEqual({ pending: null })
+  })
+
+  test('preserves edit old_string, new_string, and replace_all in pending summary and fallback prompt', async () => {
+    stubDecisionsFetch(() =>
+      makeAnswers({
+        risk: 'medium',
+        overrides: {
+          irreversible_deletion: { type: 'predicate', probability: 0.88 },
+          explicit_authorization: { type: 'predicate', probability: 0.1 },
+        },
+      }),
+    )
+    const editArgs = {
+      file_path: 'config/security.yml',
+      old_string: 'require_mfa: true\n',
+      new_string: '',
+      replace_all: true,
+    }
+    const baseSession = makeSession('edit-session')
+    const rawArgs = JSON.stringify(editArgs)
+    const editEvents = baseSession.snapshotEvents().map((event) => {
+      if (event.type === 'assistant/message') {
+        return {
+          ...event,
+          data: {
+            ...event.data,
+            message: {
+              ...event.data.message,
+              content: event.data.message.content.map((block) =>
+                block.type === 'tool-call' ? { ...block, name: 'edit', arguments: rawArgs } : block,
+              ),
+            },
+          },
+        }
+      }
+      if (event.type === 'tool/call') {
+        return { ...event, data: { ...event.data, name: 'edit', arguments: rawArgs } }
+      }
+      return event
+    })
+    const editSession = {
+      ...baseSession,
+      snapshotEvents: () => editEvents,
+      requestHeader: () => ({
+        ...baseSession.requestHeader(),
+        tools: [{ name: 'edit', description: 'Edit a file', parameters: { type: 'object' } }],
+      }),
+    }
+    const exec = makeExec(editSession, { name: 'edit', arguments: editArgs })
+    const preExecute = host.listeners.get('tools/pre-execute')
+    const decision = await preExecute(exec, async () => ({ kind: 'allow' }))
+    expect(decision.kind).toBe('ask')
+    expect(decision.displayReason.en).toContain('edit config/security.yml (delete 18 characters, replace all matches)')
+    expect(decision.displayReason.zh).toContain('edit config/security.yml（删除 18 个字符，替换全部匹配）')
+
+    const active = await (
+      await call('pending', new Request(`${BASE}/pending?session=${editSession.id}&callId=${exec.callId}`))
+    ).json()
+    expect(active.pending.action).toStrictEqual({
+      kind: 'file',
+      target: 'config/security.yml',
+      edit: {
+        oldText: 'require_mfa: true\n',
+        oldChars: 18,
+        newText: '',
+        newChars: 0,
+        replaceAll: true,
+      },
+    })
   })
 })

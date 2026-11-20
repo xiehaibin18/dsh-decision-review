@@ -83,6 +83,9 @@ function SessionApprovalBridge({
   const interaction = useSessionStatus((snapshot) =>
     sessionId ? snapshot.get(sessionId as never)?.pendingInteraction : undefined,
   )
-  const pendingApprovalKey = interaction?.kind === 'approval' ? interaction.key : undefined
-  return h(PendingApprovalHost, { t, resolveText, sessionId, api, pendingApprovalKey })
+  const isApproval = interaction?.kind === 'approval'
+  const rawCallId = isApproval ? (interaction as { callId?: unknown }).callId : undefined
+  const pendingApprovalKey = isApproval ? interaction.key : undefined
+  const pendingCallId = typeof rawCallId === 'string' && rawCallId !== '' ? rawCallId : undefined
+  return h(PendingApprovalHost, { t, resolveText, sessionId, api, pendingApprovalKey, pendingCallId })
 }

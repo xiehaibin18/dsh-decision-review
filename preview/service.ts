@@ -161,7 +161,8 @@ export function createPreviewService() {
       case 'pending': {
         const sessionId = url.searchParams.get('session')
         if (!sessionId) throw new PreviewError(400, 'missing session')
-        return json({ pending: fixturePendingReview(sessionId) })
+        const callId = url.searchParams.get('callId')
+        return json({ pending: callId ? fixturePendingReview(sessionId, callId) : null })
       }
       default:
         throw new PreviewError(404, 'Unknown preview operation')

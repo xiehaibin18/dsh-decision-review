@@ -57,6 +57,10 @@ const APPROVAL_TEXT = {
     headline: (body: string) => `Decision Review requests your approval: ${body}`,
     pending: (call: string) => `Pending call: ${call}`,
     length: (length: number) => ` (${length} characters)`,
+    editSummary: (oldLen: number, newLen: number, replaceAll: boolean) => {
+      const scope = replaceAll ? ', replace all matches' : ''
+      return newLen === 0 ? ` (delete ${oldLen} characters${scope})` : ` (${oldLen} → ${newLen} characters${scope})`
+    },
     truncated: (length: number) => `… (${length} more characters)`,
   },
   zh: {
@@ -64,6 +68,10 @@ const APPROVAL_TEXT = {
     headline: (body: string) => `决策评审请你决定是否放行：${body}`,
     pending: (call: string) => `待评审的调用：${call}`,
     length: (length: number) => `（${length} 个字符）`,
+    editSummary: (oldLen: number, newLen: number, replaceAll: boolean) => {
+      const scope = replaceAll ? '，替换全部匹配' : ''
+      return newLen === 0 ? `（删除 ${oldLen} 个字符${scope}）` : `（${oldLen} → ${newLen} 个字符${scope}）`
+    },
     truncated: (length: number) => `…（另有 ${length} 个字符）`,
   },
 }
@@ -173,18 +181,28 @@ export function summarizePendingAction(exec: ToolExecution): PendingActionSummar
   if (name === 'bash' && typeof fields.command === 'string') {
     return { kind: 'command', detail: clip(fields.command) }
   }
-  if (name === 'write' || name === 'edit') {
+  if (name === 'write') {
     const target = String(fields.file_path ?? fields.path ?? '?')
-    const content =
-      typeof fields.content === 'string'
-        ? fields.content
-        : typeof fields.new_string === 'string'
-          ? fields.new_string
-          : undefined
+    const content = typeof fields.content === 'string' ? fields.content : undefined
     return {
       kind: 'file',
       target,
       ...(content === undefined ? {} : { detail: clip(content), meta: { chars: content.length } }),
+    }
+  }
+  if (name === 'edit') {
+    const target = String(fields.file_path ?? fields.path ?? '?')
+    const oldText = typeof fields.old_string === 'string' ? fields.old_string : undefined
+    const newText = typeof fields.new_string === 'string' ? fields.new_string : undefined
+    const replaceAll = fields.replace_all === true
+    return {
+      kind: 'file',
+      target,
+      edit: {
+        ...(oldText === undefined ? {} : { oldText: clip(oldText), oldChars: oldText.length }),
+        ...(newText === undefined ? {} : { newText: clip(newText), newChars: newText.length }),
+        replaceAll,
+      },
     }
   }
   if (name === 'web_fetch' && typeof fields.url === 'string') {
@@ -217,9 +235,17 @@ function describePendingLine(exec: ToolExecution, locale: Locale): string {
   if (name === 'bash' && typeof fields.command === 'string') {
     return exec.parent === undefined ? '' : copy.pending(`bash ${truncate(fields.command)}`)
   }
-  if (name === 'write' || name === 'edit') {
+  if (name === 'write') {
     const size = typeof fields.content === 'string' ? copy.length(fields.content.length) : ''
     return copy.pending(`${name} ${fields.file_path ?? fields.path ?? '?'}${size}`)
+  }
+  if (name === 'edit') {
+    const target = String(fields.file_path ?? fields.path ?? '?')
+    const oldLen = typeof fields.old_string === 'string' ? fields.old_string.length : undefined
+    const newLen = typeof fields.new_string === 'string' ? fields.new_string.length : undefined
+    const summary =
+      oldLen !== undefined && newLen !== undefined ? copy.editSummary(oldLen, newLen, fields.replace_all === true) : ''
+    return copy.pending(`edit ${target}${summary}`)
   }
   if (name === 'web_fetch' && typeof fields.url === 'string') return copy.pending(`web_fetch ${truncate(fields.url)}`)
   if (name === 'web_search' && Array.isArray(fields.queries))

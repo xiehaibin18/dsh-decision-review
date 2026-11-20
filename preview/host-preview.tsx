@@ -5,7 +5,7 @@ import zhMetadata from '../assets/locale/zh.json'
 import { ConfigPanel } from '../src/client/panel.js'
 import { PendingApprovalHost } from '../src/client/pending-approval-card.js'
 import { ApprovalStatsPill } from '../src/client/stats-pill.js'
-import type { ApprovalCaseId } from './fixtures.js'
+import { approvalCaseCallId, type ApprovalCaseId } from './fixtures.js'
 import type { ActiveSession } from './http.js'
 import { previewLocale } from './locale.js'
 
@@ -251,6 +251,7 @@ function ConversationApproval({
               sessionId={approvalCase}
               api={session.api}
               pendingApprovalKey={`preview-approval-${approvalCase}`}
+              pendingCallId={approvalCaseCallId(approvalCase)}
             />
           )}
         </div>

@@ -221,6 +221,12 @@ export function apply(ctx: Context): void {
       { prepend: true },
     )
 
+    // Clear any pending review once the tool pipeline finishes, covering host-side
+    // rejections (such as effective approval policy `never`) that skip `approval/request`.
+    yield ctx.on('tools/result', (exec) => {
+      if (exec.agent) pendingStore.clear(exec.agent.session.id, exec.callId)
+    })
+
     // Observe the approval waterfall without answering: each settled ask
     // feeds the per-session approval stats served to the composer dock chip
     // and clears any pending review context once the user decides.

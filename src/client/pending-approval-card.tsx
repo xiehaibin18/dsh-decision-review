@@ -79,8 +79,12 @@ function buildSignalRows(t: Translate, scores: PendingDecisionScores, why: Denia
     authFailed,
   )
 
+  // Match server escalation (`verdict.ts`): under low confidence either `tStrongPred`
+  // or `tMedPred` triggers medium escalation, so the effective threshold is the smaller one.
   const medThreshold =
-    riskClass && riskClass.confidence < thresholds.tConf ? thresholds.tMedPred : thresholds.tStrongPred
+    riskClass && riskClass.confidence < thresholds.tConf
+      ? Math.min(thresholds.tStrongPred, thresholds.tMedPred)
+      : thresholds.tStrongPred
   const mediumPredicates: readonly ('security_change' | 'irreversible_deletion' | 'production_effect')[] = [
     'security_change',
     'irreversible_deletion',
@@ -145,7 +149,8 @@ export function PendingApprovalCard({ t, resolveText, pending }: PendingApproval
   const visibleRows = showAllScores || keyRows.length === 0 ? allRows : keyRows
   const hasHiddenRows = keyRows.length > 0 && keyRows.length < allRows.length
   const actionKindLabel = t(`approval.action.${pending.action.kind}`)
-  const hasActionBody = Boolean(pending.action.target || pending.action.detail)
+  const edit = pending.action.edit
+  const hasActionBody = Boolean(pending.action.target || pending.action.detail || edit)
 
   return (
     <section
@@ -212,6 +217,11 @@ export function PendingApprovalCard({ t, resolveText, pending }: PendingApproval
               <div className="decision-review-approval-block-head">
                 <span className="decision-review-approval-block-title">{t('approval.action.title')}</span>
                 <span className="decision-review-approval-kind">{actionKindLabel}</span>
+                {edit && (
+                  <span className="decision-review-approval-scope" data-scope={edit.replaceAll ? 'all' : 'single'}>
+                    {t(edit.replaceAll ? 'approval.edit.scope.all' : 'approval.edit.scope.single')}
+                  </span>
+                )}
                 {pending.action.meta?.chars !== undefined && (
                   <span className="decision-review-approval-meta">
                     {t('approval.action.chars', { count: pending.action.meta.chars })}
@@ -219,6 +229,39 @@ export function PendingApprovalCard({ t, resolveText, pending }: PendingApproval
                 )}
               </div>
               {pending.action.target && <div className="decision-review-approval-target">{pending.action.target}</div>}
+              {edit && (
+                <div className="decision-review-approval-edit">
+                  {edit.oldText !== undefined && (
+                    <div className="decision-review-approval-edit-pane" data-pane="old">
+                      <span className="decision-review-approval-edit-label">
+                        {t('approval.edit.old', { count: edit.oldChars ?? edit.oldText.length })}
+                      </span>
+                      <pre className="decision-review-approval-code">
+                        <code>{edit.oldText}</code>
+                      </pre>
+                    </div>
+                  )}
+                  {edit.newText !== undefined && (
+                    <div
+                      className="decision-review-approval-edit-pane"
+                      data-pane={edit.newText === '' ? 'delete' : 'new'}
+                    >
+                      {edit.newText === '' ? (
+                        <span className="decision-review-approval-edit-delete">{t('approval.edit.delete')}</span>
+                      ) : (
+                        <>
+                          <span className="decision-review-approval-edit-label">
+                            {t('approval.edit.new', { count: edit.newChars ?? edit.newText.length })}
+                          </span>
+                          <pre className="decision-review-approval-code">
+                            <code>{edit.newText}</code>
+                          </pre>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               {pending.action.detail && (
                 <pre className="decision-review-approval-code">
                   <code>{pending.action.detail}</code>
@@ -309,45 +352,71 @@ interface PendingApprovalHostProps {
   sessionId?: string
   api: ReviewApi
   pendingApprovalKey?: string
+  pendingCallId?: string
+}
+
+interface LoadedPending {
+  key: string
+  callId: string
+  review: PendingReview
 }
 
 /**
  * Portals the Decision Review explanation card into the surrounding `[data-composer-seat]`
  * flex column right above the host's official approval card whenever the host reports a
- * pending approval interaction for this session.
+ * pending approval interaction whose `callId` matches this plugin's pending review.
  */
-export function PendingApprovalHost({ t, resolveText, sessionId, api, pendingApprovalKey }: PendingApprovalHostProps) {
+export function PendingApprovalHost({
+  t,
+  resolveText,
+  sessionId,
+  api,
+  pendingApprovalKey,
+  pendingCallId,
+}: PendingApprovalHostProps) {
   const [anchor, setAnchor] = React.useState<HTMLSpanElement | null>(null)
-  const [pending, setPending] = React.useState<PendingReview | null>(null)
+  const [loaded, setLoaded] = React.useState<LoadedPending | null>(null)
 
   React.useEffect(() => {
-    if (!sessionId || !pendingApprovalKey) {
-      setPending(null)
-      return
-    }
+    setLoaded(null)
+    if (!sessionId || !pendingApprovalKey || !pendingCallId) return
     const controller = new AbortController()
     const { signal } = controller
-    api.getPending(sessionId, signal).then(
+    api.getPending(sessionId, pendingCallId, signal).then(
       (result) => {
-        if (!signal.aborted) setPending(result)
+        if (signal.aborted) return
+        if (result && result.callId === pendingCallId) {
+          setLoaded({ key: pendingApprovalKey, callId: pendingCallId, review: result })
+        } else {
+          setLoaded(null)
+        }
       },
       () => {
-        if (!signal.aborted) setPending(null)
+        if (!signal.aborted) setLoaded(null)
       },
     )
     return () => controller.abort()
-  }, [api, sessionId, pendingApprovalKey])
+  }, [api, sessionId, pendingApprovalKey, pendingCallId])
 
-  if (!pendingApprovalKey) return null
+  if (!pendingApprovalKey || !pendingCallId) return null
+
+  // Synchronous render-time binding check: never display a prior request's card even for one frame.
+  const activePending =
+    loaded &&
+    loaded.key === pendingApprovalKey &&
+    loaded.callId === pendingCallId &&
+    loaded.review.callId === pendingCallId
+      ? loaded.review
+      : null
 
   const seat = anchor?.closest('[data-composer-seat]') ?? null
   return (
     <>
       <span ref={setAnchor} className="decision-review-approval-anchor" aria-hidden="true" />
-      {pending && seat
+      {activePending && seat
         ? createPortal(
             <div className="decision-review-approval-slot">
-              <PendingApprovalCard key={pending.callId} t={t} resolveText={resolveText} pending={pending} />
+              <PendingApprovalCard key={activePending.callId} t={t} resolveText={resolveText} pending={activePending} />
             </div>,
             seat,
           )

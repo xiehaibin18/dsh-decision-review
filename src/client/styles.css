@@ -1267,6 +1267,56 @@
   font-size: 11px;
 }
 
+.decision-review-approval-scope {
+  padding: 0 6px;
+  border: 1px solid var(--decision-review-approval-divider);
+  border-radius: 4px;
+  background: var(--decision-review-approval-subtle);
+  color: var(--decision-review-approval-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.decision-review-approval-scope[data-scope='all'] {
+  border-color: color-mix(in srgb, var(--decision-review-approval-warn) 38%, transparent);
+  background: color-mix(in srgb, var(--decision-review-approval-warn) 10%, var(--decision-review-approval-surface));
+  color: var(--decision-review-approval-warn);
+}
+
+.decision-review-approval-edit {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.decision-review-approval-edit-pane {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.decision-review-approval-edit-label {
+  color: var(--decision-review-approval-muted);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.decision-review-approval-edit-pane[data-pane='old'] .decision-review-approval-edit-label {
+  color: var(--decision-review-approval-error);
+}
+
+.decision-review-approval-edit-delete {
+  width: fit-content;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--decision-review-approval-error) 34%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--decision-review-approval-error) 8%, var(--decision-review-approval-surface));
+  color: var(--decision-review-approval-error);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
 .decision-review-approval-meta {
   color: var(--decision-review-approval-muted);
   font-size: 11px;

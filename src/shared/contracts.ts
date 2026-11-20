@@ -154,10 +154,19 @@ export interface TestResponse {
   results: TestResult[]
 }
 
+export interface PendingEditPreview {
+  oldText?: string
+  newText?: string
+  oldChars?: number
+  newChars?: number
+  replaceAll: boolean
+}
+
 export interface PendingActionSummary {
   kind: 'command' | 'file' | 'url' | 'search' | 'mcp' | 'tool'
   target?: string
   detail?: string
+  edit?: PendingEditPreview
   meta?: { chars?: number }
 }
 

@@ -6,17 +6,70 @@ import { composeDecision, type ComposeInput } from '../src/server/verdict.js'
 import type { SceneId } from './scenes.js'
 
 export const APPROVAL_CASES = [
-  { id: 'security', label: '安全变更 · 缺明确授权' },
-  { id: 'ptc-exfil', label: 'PTC 内层 Bash · 高风险外传' },
-  { id: 'rule-ask', label: '自定义规则 · 强制推送' },
-  { id: 'conflict', label: '分类冲突 · 写入生产配置' },
+  { id: 'security', callId: 'call-preview-security', label: '安全变更 · 缺明确授权' },
+  { id: 'ptc-exfil', callId: 'call-preview-ptc-exfil', label: 'PTC 内层 Bash · 高风险外传' },
+  { id: 'rule-ask', callId: 'call-preview-rule-ask', label: '自定义规则 · 强制推送' },
+  { id: 'conflict', callId: 'call-preview-conflict', label: '分类冲突 · 写入生产配置' },
+  { id: 'edit-delete', callId: 'call-preview-edit-delete', label: '编辑删除 · 替换全部匹配' },
 ] as const
 
 export type ApprovalCaseId = (typeof APPROVAL_CASES)[number]['id']
 
-export function fixturePendingReview(caseId: string): PendingReview | null {
+export function approvalCaseCallId(caseId: ApprovalCaseId): string {
+  return APPROVAL_CASES.find((item) => item.id === caseId)?.callId ?? 'call-preview-security'
+}
+
+export function fixturePendingReview(caseId: string, callId: string): PendingReview | null {
+  const review = buildFixturePendingReview(caseId)
+  return review && review.callId === callId ? review : null
+}
+
+function buildFixturePendingReview(caseId: string): PendingReview | null {
   const thresholds = { ...THRESHOLD_DEFAULTS }
   switch (caseId) {
+    case 'edit-delete': {
+      const why = {
+        code: 'authorization' as const,
+        value: 0.16,
+        threshold: thresholds.tAuth,
+        pred: 'irreversible_deletion' as const,
+        predValue: 0.84,
+      }
+      return {
+        callId: 'call-preview-edit-delete',
+        tool: 'edit',
+        isPtcInner: false,
+        engine: 'decisions',
+        risk: 'medium',
+        why,
+        display: { en: localizedWhy(why, 'en'), zh: localizedWhy(why, 'zh') },
+        action: {
+          kind: 'file',
+          target: 'config/security-policy.yml',
+          edit: {
+            oldText: 'require_mfa: true\nallow_legacy_tokens: false',
+            oldChars: 44,
+            newText: '',
+            newChars: 0,
+            replaceAll: true,
+          },
+        },
+        scores: {
+          riskClass: { choice: 'medium', confidence: 0.92 },
+          predicates: {
+            exfiltration: 0.02,
+            irreversible_deletion: 0.84,
+            production_effect: 0.35,
+            security_change: 0.76,
+            session_created_cleanup: 0.0,
+            explicit_authorization: 0.16,
+          },
+          refused: [],
+          thresholds,
+        },
+        createdAt: 1732150000000,
+      }
+    }
     case 'ptc-exfil': {
       const why = { code: 'exfiltration' as const, value: 0.96, threshold: thresholds.tHighPred }
       return {

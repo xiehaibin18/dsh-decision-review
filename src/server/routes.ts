@@ -259,9 +259,13 @@ export function reviewRoutes(
       path: `${API_BASE}/pending`,
       methods: ['GET'],
       handle: async (request) => {
-        const session = new URL(request.url).searchParams.get('session')
+        const params = new URL(request.url).searchParams
+        const session = params.get('session')
         if (!session) throw new RequestError(400, 'missing session')
-        return jsonResponse({ pending: pendingStore?.get(session) ?? null } satisfies PendingReviewResponse)
+        const callId = params.get('callId')
+        return jsonResponse({
+          pending: callId ? (pendingStore?.get(session, callId) ?? null) : null,
+        } satisfies PendingReviewResponse)
       },
     },
     {
