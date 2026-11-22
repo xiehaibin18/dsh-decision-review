@@ -3,6 +3,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, jest, mock, spyOn, test } from 'bun:test'
 import { apply, createReviewTrail } from '../dist/index.js'
 import {
+  jsonRequest,
   makeAnswers,
   makeExec,
   makeHost,
@@ -160,6 +161,211 @@ describe('decisions engine through the approval entry point', () => {
     } finally {
       jest.useRealTimers()
     }
+  })
+
+  describe('Decisions cache breakpoints', () => {
+    const marker = { mode: 'explicit' }
+    const history = (body) => body.input[0].content
+    const boundaries = (body) => history(body).flatMap((part, index) => (part.prompt_cache_breakpoint ? [index] : []))
+    const tail = (body) => history(body).length - 1
+    const text = (parts) => parts.map((part) => part.text)
+
+    function start(answersFor = () => makeAnswers()) {
+      const fetch = stubDecisionsFetch(answersFor)
+      apply(host.ctx)
+      const preExecute = host.listeners.get('tools/pre-execute')
+      return {
+        send: (session, overrides) => preExecute(makeExec(session, overrides), async () => ({ kind: 'allow' })),
+        body: (index) => JSON.parse(fetch.mock.calls[index][1].body),
+      }
+    }
+
+    function appendTurn(session, turn) {
+      const log = session.snapshotEvents()
+      const seq = log.length
+      const id = `call-${turn + 1}`
+      const command = `echo turn ${turn}`
+      const args = JSON.stringify({ command })
+      log.push(
+        { seq, type: 'step/end', data: { turn: turn - 1, step: 0 } },
+        {
+          seq: seq + 1,
+          type: 'user/message',
+          data: {
+            source: { kind: 'user', rpcId: `turn-${turn}` },
+            content: [{ type: 'text', text: `Run check ${turn}.` }],
+          },
+        },
+        { seq: seq + 2, type: 'step/start', data: { turn, step: 0 } },
+        {
+          seq: seq + 3,
+          type: 'assistant/message',
+          data: {
+            turn,
+            step: 0,
+            message: { content: [{ type: 'tool-call', id, name: 'bash', arguments: args }] },
+          },
+        },
+        { seq: seq + 4, type: 'tool/call', data: { turn, step: 0, callId: id, name: 'bash', arguments: args } },
+      )
+      session.surface.nodes.push(seq + 1, seq + 3)
+      return { callId: id, rootCallId: id, arguments: { command } }
+    }
+
+    test('reuses the exact previous history boundary while marking the extended history tail', async () => {
+      const session = makeSession('growing')
+      const { send, body } = start()
+      await expect(send(session)).resolves.toStrictEqual({ kind: 'allow' })
+      await expect(send(session, appendTurn(session, 1))).resolves.toStrictEqual({ kind: 'allow' })
+      const first = body(0)
+      const second = body(1)
+
+      expect(first.prompt_cache_options).toStrictEqual({ mode: 'explicit' })
+      expect(second.prompt_cache_key).toBe(first.prompt_cache_key)
+      expect(second.questions).toStrictEqual(first.questions)
+      expect(boundaries(first)).toStrictEqual([tail(first)])
+      expect(text(history(second).slice(0, tail(first) + 1))).toStrictEqual(text(history(first)))
+      expect(history(second)[tail(first)].prompt_cache_breakpoint).toStrictEqual(marker)
+      expect(boundaries(second)).toStrictEqual([tail(first), tail(second)])
+      expect(second.input[1].content).toHaveLength(1)
+      expect(second.input[1].content[0].prompt_cache_breakpoint).toBeUndefined()
+    })
+
+    test('keeps one breakpoint when only the pending arguments change', async () => {
+      const session = makeSession('pending-only')
+      const { send, body } = start()
+      await send(session)
+      const command = 'echo different pending'
+      const args = JSON.stringify({ command })
+      const events = session.snapshotEvents()
+      events[2].data.message.content[0].arguments = args
+      events[3].data.arguments = args
+      await send(session, { arguments: { command } })
+
+      expect(history(body(1))).toStrictEqual(history(body(0)))
+      expect(body(1).input[1].content).toStrictEqual([{ type: 'input_text', text: expect.stringContaining(command) }])
+    })
+
+    test('does not reuse a boundary when an earlier history part was rewritten', async () => {
+      const session = makeSession('rewritten')
+      const { send, body } = start()
+      await send(session)
+      const next = appendTurn(session, 1)
+      session.snapshotEvents()[0].data.content[0].text = 'Use the replacement workflow.'
+      await send(session, next)
+
+      expect(tail(body(1))).toBeGreaterThan(tail(body(0)))
+      expect(boundaries(body(1))).toStrictEqual([tail(body(1))])
+    })
+
+    test('keeps an earlier match when only the end of the history was rewritten', async () => {
+      const session = makeSession('partially-rewritten')
+      const { send, body } = start()
+      await send(session)
+      await send(session, appendTurn(session, 1))
+      const next = appendTurn(session, 2)
+      session.snapshotEvents()[5].data.content[0].text = 'A rewritten second instruction.'
+      await send(session, next)
+
+      expect(boundaries(body(2))).toStrictEqual([tail(body(0)), tail(body(2))])
+    })
+
+    test('does not reuse a matching boundary from a different session', async () => {
+      const { send, body } = start()
+      const first = makeSession('first')
+      const other = makeSession('second')
+      await send(first)
+      await send(other)
+      await send(first, appendTurn(first, 1))
+      appendTurn(other, 1)
+      // Show the same schema on the earlier call in both sessions, without
+      // offering the second boundary in the second session.
+      await send(other, appendTurn(other, 2))
+
+      expect(body(3).prompt_cache_key).not.toBe(body(2).prompt_cache_key)
+      expect(text(history(body(3)).slice(0, tail(body(2)) + 1))).toStrictEqual(text(history(body(2))))
+      expect(boundaries(body(3))).toStrictEqual([tail(body(1)), tail(body(3))])
+    })
+
+    test('does not carry forward markers after the working directory changes', async () => {
+      const session = makeSession('different-cwd')
+      let cwd = '/work'
+      host.ctx.workingDirectory.ensure = async () => cwd
+      const { send, body } = start()
+      await send(session)
+      cwd = '/other'
+      await send(session, appendTurn(session, 1))
+
+      expect(history(body(1))[0].text).toContain(cwd)
+      expect(text(history(body(1)).slice(1, tail(body(0)) + 1))).toStrictEqual(text(history(body(0)).slice(1)))
+      expect(boundaries(body(1))).toStrictEqual([tail(body(1))])
+    })
+
+    test('starts with a fresh tail after a Decisions settings change', async () => {
+      const session = makeSession('settings-change')
+      const { send, body } = start()
+      await send(session)
+      const route = '/api/decision-review/save'
+      const response = await host.routes
+        .get(route)
+        .fetch(jsonRequest(`http://127.0.0.1:3080${route}`, { settings: { model: 'fixture-model-v2' } }))
+      expect(response.status).toBe(200)
+      await send(session, appendTurn(session, 1))
+
+      expect(body(1).model).toBe('fixture-model-v2')
+      expect(text(history(body(1)).slice(0, tail(body(0)) + 1))).toStrictEqual(text(history(body(0))))
+      expect(boundaries(body(1))).toStrictEqual([tail(body(1))])
+    })
+
+    test('keeps the last three eligible boundaries and the latest tail', async () => {
+      const session = makeSession('bounded')
+      const { send, body } = start()
+      await send(session)
+      for (let turn = 1; turn <= 5; turn++) await send(session, appendTurn(session, turn))
+
+      expect(boundaries(body(5))).toStrictEqual([2, 3, 4, 5].map((index) => tail(body(index))))
+    })
+
+    test('drops a failed tail without losing a prior successful boundary', async () => {
+      const session = makeSession('failed')
+      const { send, body } = start((_body, _init, call) => {
+        if (call === 2) throw new Error('synthetic network error')
+        return makeAnswers()
+      })
+      await send(session)
+      await expect(send(session, appendTurn(session, 1))).resolves.toMatchObject({
+        kind: 'deny',
+        info: { code: 'AUTO_REVIEW_FAILED' },
+      })
+      await send(session, appendTurn(session, 2))
+
+      expect(boundaries(body(2))).toStrictEqual([tail(body(0)), tail(body(2))])
+    })
+
+    test('inherits matching in-flight boundaries and retains newer ones after out-of-order responses', async () => {
+      const firstStarted = Promise.withResolvers()
+      const releaseFirst = Promise.withResolvers()
+      const session = makeSession('parallel')
+      const { send, body } = start(async (_body, _init, call) => {
+        if (call === 1) {
+          firstStarted.resolve()
+          await releaseFirst.promise
+        }
+        return makeAnswers()
+      })
+      const first = send(session)
+      try {
+        await firstStarted.promise
+        await expect(send(session, appendTurn(session, 1))).resolves.toStrictEqual({ kind: 'allow' })
+      } finally {
+        releaseFirst.resolve()
+        await first
+      }
+      await send(session, appendTurn(session, 2))
+
+      expect(boundaries(body(1))).toStrictEqual([tail(body(0)), tail(body(1))])
+      expect(boundaries(body(2))).toStrictEqual([tail(body(0)), tail(body(1)), tail(body(2))])
+    })
   })
 
   test('sends complete instruction, historical call, schema and pending arguments', async () => {

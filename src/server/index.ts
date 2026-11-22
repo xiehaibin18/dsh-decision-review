@@ -9,7 +9,7 @@ import type {} from '@deepseek-ai/dsh-permission-presets'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-user-approval'
-import { decisionsClassifyRisk } from './decisions-engine.js'
+import { decisionsClassifyRisk, type DecisionCaches } from './decisions-engine.js'
 import { buildPendingReview, createPendingReviewStore } from './pending-store.js'
 import { AUTO_PRESENTATION, askUser, denied, failed, settingsInvalidDecision } from './review-outcome.js'
 import { guarded, reviewRoutes } from './routes.js'
@@ -70,6 +70,7 @@ export function apply(ctx: Context): void {
   let accepting = true
   const active = new Set<Promise<void>>()
   const lifecycle = new AbortController()
+  const decisionCaches: DecisionCaches = new WeakMap()
   const shownBySession = new WeakMap<Session, ShownSchemas>()
 
   const routes = reviewRoutes(
@@ -124,7 +125,7 @@ export function apply(ctx: Context): void {
               : await (
                   settings.engine === 'session'
                     ? sessionClassifyRisk(ctx, agent, exec, signal, shown, settings)
-                    : decisionsClassifyRisk(ctx, agent, exec, signal, shown, settings)
+                    : decisionsClassifyRisk(ctx, agent, exec, signal, shown, settings, decisionCaches)
                 ).then(
                   (value) => ({ ok: true as const, value }),
                   (error: unknown) => ({ ok: false as const, error }),
