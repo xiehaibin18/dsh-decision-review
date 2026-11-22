@@ -3,6 +3,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-working-directory'
 import type { OperatorRule, PredicateName, Risk } from '../shared/contracts.js'
+import { DecisionBreakpoints } from './decision-breakpoints.js'
 import { isRecord, json } from './json.js'
 import { EFFECTIVE_AUTHORIZATION } from './review-policy.js'
 import type { Settings } from './settings.js'
@@ -212,8 +213,8 @@ function rulesQuestion(rules?: readonly OperatorRule[]): DecisionQuestion[] {
   ]
 }
 
-/** Build the two-message Decisions input: complete history with a stable cache
- * breakpoint, then the whole pending call. */
+/** Build the two-message input with a fresh history-tail marker, then the
+ * unmarked pending call. Live reviews also re-offer earlier matching tails. */
 export function decisionsMessages(
   historyEntries: readonly HistoricalEntry[],
   pendingEntry: HistoricalEntry,
@@ -266,6 +267,8 @@ export function decisionsBody(settings: Settings, input: DecisionMessage[], cach
   }
 }
 
+export type DecisionCaches = WeakMap<Settings, WeakMap<Agent['session'], DecisionBreakpoints>>
+
 /** Review one pending action through the OpenAI Decisions API. */
 export async function decisionsClassifyRisk(
   ctx: Context,
@@ -274,7 +277,18 @@ export async function decisionsClassifyRisk(
   signal: AbortSignal,
   shown: ShownSchemas,
   settings: Settings,
+  caches: DecisionCaches,
 ) {
+  let bySession = caches.get(settings)
+  if (!bySession) {
+    bySession = new WeakMap()
+    caches.set(settings, bySession)
+  }
+  let boundaries = bySession.get(agent.session)
+  if (!boundaries) {
+    boundaries = new DecisionBreakpoints()
+    bySession.set(agent.session, boundaries)
+  }
   const started = Date.now()
   const cwd = await ctx.workingDirectory.ensure(agent, signal)
   const snapshot = snapshotAutoReview(agent, exec, cwd, shown)
@@ -285,7 +299,17 @@ export async function decisionsClassifyRisk(
     decisionsMessages(snapshot.history.slice(0, -1), pendingEntry, cwd),
     `decision-review:${agent.session.id}`,
   )
-  const { usage, answers } = await requestDecisions(settings, body, signal)
+  const settle = boundaries.prepare(body.input[0].content)
+  const { usage, answers } = await requestDecisions(settings, body, signal).then(
+    (result) => {
+      settle?.(true)
+      return result
+    },
+    (error: unknown) => {
+      settle?.(false)
+      throw error
+    },
+  )
   if (usage) {
     const tokens = isRecord(usage) ? usage : {}
     const details = isRecord(tokens.input_tokens_details) ? tokens.input_tokens_details : {}
