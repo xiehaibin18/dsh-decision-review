@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 const LIMIT = 4
 const PROMOTION_GROWTH = 8
 const PROBE_ATTEMPTS = 2
+const PROBE_SEND_LIMIT = 3
 const PROBE_MAX_IDLE_MS = 10 * 60_000
 
 interface Boundary {
@@ -29,6 +30,7 @@ export class DecisionBreakpoints {
     boundary: Boundary
     baseline: number
     attempts: number
+    sent: number
     largestOfferedTail: number
     activeProbe?: number
   }
@@ -79,6 +81,7 @@ export class DecisionBreakpoints {
       challenger &&
       trial &&
       trial.activeProbe === undefined &&
+      trial.sent < PROBE_SEND_LIMIT &&
       idleMs !== null &&
       idleMs <= PROBE_MAX_IDLE_MS &&
       tail > trial.largestOfferedTail &&
@@ -96,7 +99,10 @@ export class DecisionBreakpoints {
 
     if (trial) {
       trial.largestOfferedTail = Math.max(trial.largestOfferedTail, tail)
-      if (probe) trial.activeProbe = order
+      if (probe) {
+        trial.activeProbe = order
+        trial.sent++
+      }
     }
     const proposed = selected[selected.length - 1]
     if (proposed) this.pending = [...this.pending, proposed].slice(-LIMIT)
@@ -108,6 +114,7 @@ export class DecisionBreakpoints {
         idleMs,
         challengerBlock: challenger?.index ?? null,
         probeBaselineTokens: trial?.baseline ?? null,
+        probeSent: trial?.sent ?? null,
         probeAttempts: trial?.attempts ?? null,
         settledGrowthBeforeRequest: this.growth,
         anchorBlock: anchor?.index ?? null,
@@ -131,7 +138,16 @@ export class DecisionBreakpoints {
       settle: (success: boolean, positiveWrite = false, readTokens: number | null = null) => {
         this.pending = this.pending.filter((entry) => entry !== proposed)
         if (trial?.activeProbe === order) delete trial.activeProbe
-        if (!success || order <= this.lastSuccessfulOrder) return
+        if (!success || order <= this.lastSuccessfulOrder) {
+          // A failed or superseded request may still have reached the backend.
+          // Bound sends independently; never use its telemetry for promotion.
+          if (probe && trial && this.trial === trial && trial.sent >= PROBE_SEND_LIMIT) {
+            this.trial = undefined
+            this.growth = 0
+            return { transition: 'probe-budget-exhausted' }
+          }
+          return
+        }
         // Success means these were offered, not necessarily written. Only the
         // newest successful submission may replace the current prefix set.
         // In particular, a late response cannot revive a rewritten anchor.
@@ -174,10 +190,10 @@ export class DecisionBreakpoints {
             this.growth = 0
             this.trial = undefined
             transition = 'promote'
-          } else if (trial.attempts + 1 >= PROBE_ATTEMPTS) {
+          } else if (trial.attempts + 1 >= PROBE_ATTEMPTS || trial.sent >= PROBE_SEND_LIMIT) {
             this.growth = 0
             this.trial = undefined
-            transition = 'rollback'
+            transition = trial.attempts + 1 >= PROBE_ATTEMPTS ? 'rollback' : 'probe-budget-exhausted'
           } else {
             trial.attempts++
             transition = 'probe-no-uplift'
@@ -201,6 +217,7 @@ export class DecisionBreakpoints {
               boundary: proposed,
               baseline: this.baseline,
               attempts: 0,
+              sent: 0,
               largestOfferedTail: proposed.index,
             }
             transition = 'stage'

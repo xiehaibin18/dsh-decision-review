@@ -486,6 +486,45 @@ describe('decisions engine through the approval entry point', () => {
       },
     )
 
+    test.each(['failure', 'stale'])('restores the old secondary after three unusable probe sends: %s', async (mode) => {
+      const session = makeSession('bounded-unusable-probes')
+      let block
+      const { send, body } = start(async (request, _init, call) => {
+        const markers = boundaries(request)
+        if (call > 10 && markers.length === 3) {
+          if (mode === 'failure') throw new Error('synthetic upstream timeout')
+          block.started.resolve()
+          await block.release.promise
+          return { answers: makeAnswers(), usage: { input_tokens_details: { cached_tokens: 8192 } } }
+        }
+        return {
+          answers: makeAnswers(),
+          usage: { input_tokens_details: { cached_tokens: 2048, cache_write_tokens: 512 } },
+        }
+      })
+      await send(session)
+      for (let turn = 1; turn <= 9; turn++) await send(session, appendTurn(session, turn))
+      let turn = 10
+      for (let probe = 0; probe < 3; probe++) {
+        block = { started: Promise.withResolvers(), release: Promise.withResolvers() }
+        const index = turn
+        const sent = send(session, appendTurn(session, turn++))
+        if (mode === 'stale') {
+          try {
+            await block.started.promise
+            await send(session, appendTurn(session, turn++))
+          } finally {
+            block.release.resolve()
+          }
+        }
+        await sent
+        expect(boundaries(body(index))).toStrictEqual([0, 9, index].map((i) => tail(body(i))))
+      }
+      await send(session, appendTurn(session, turn))
+      expect(boundaries(body(turn))).toContain(tail(body(1)))
+      expect(boundaries(body(turn))).toHaveLength(4)
+    })
+
     test('drops a failed tail without losing a prior successful boundary', async () => {
       const session = makeSession('failed')
       const { send, body } = start((_body, _init, call) => {

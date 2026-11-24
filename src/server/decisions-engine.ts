@@ -322,9 +322,9 @@ export async function decisionsClassifyRisk(
     usage?: unknown,
     settled?: {
       transition: string
-      settledAnchorBlock: number | null
-      settledCheckpointBlock: number | null
-      settledCheckpointSuccessfulOffers: number | null
+      settledAnchorBlock?: number | null
+      settledCheckpointBlock?: number | null
+      settledCheckpointSuccessfulOffers?: number | null
     },
   ) {
     if (!diagnostics.record) return
@@ -368,7 +368,7 @@ export async function decisionsClassifyRisk(
       return result
     },
     (error: unknown) => {
-      trace.settle(false)
+      const settled = trace.settle(false)
       emit(
         error instanceof Error && error.name === 'TimeoutError'
           ? 'timeout'
@@ -379,6 +379,8 @@ export async function decisionsClassifyRisk(
               : httpStatus >= 200 && httpStatus < 300
                 ? 'invalid-response'
                 : 'http-error',
+        undefined,
+        settled,
       )
       throw error
     },
