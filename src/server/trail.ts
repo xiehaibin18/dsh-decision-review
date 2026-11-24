@@ -6,6 +6,7 @@ import { isRecord } from './json.js'
 export type ReviewRoute = 'allow' | 'ask' | 'final' | 'fail'
 
 type TrailEntry =
+  | { event: 'decisions-cache-diagnostic'; session: string; callId: string; diagnostic: unknown }
   | {
       event: 'review'
       session: string
@@ -94,7 +95,8 @@ export function createReviewTrail(profileDirectory: string) {
       } catch {
         continue // a torn tail line from a crash must not break the fold
       }
-      if (!isRecord(entry) || typeof entry.session !== 'string') continue
+      if (!isRecord(entry) || typeof entry.session !== 'string' || entry.event === 'decisions-cache-diagnostic')
+        continue
       const key = entry.session.replace(/^session-/, '')
       const bucket = fold.get(key) ?? newSessionBucket()
       if (entry.event === 'review') {
