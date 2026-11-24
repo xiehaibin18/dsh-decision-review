@@ -170,9 +170,17 @@ describe('decisions engine through the approval entry point', () => {
     const tail = (body) => history(body).length - 1
     const text = (parts) => parts.map((part) => part.text)
 
-    function start(answersFor = () => makeAnswers()) {
+    function start(answersFor = () => makeAnswers(), diagnostics = false) {
       const fetch = stubDecisionsFetch(answersFor)
-      apply(host.ctx)
+      const original = process.env.DSH_DECISIONS_CACHE_DIAGNOSTICS
+      try {
+        if (diagnostics) process.env.DSH_DECISIONS_CACHE_DIAGNOSTICS = '1'
+        else delete process.env.DSH_DECISIONS_CACHE_DIAGNOSTICS
+        apply(host.ctx)
+      } finally {
+        if (original === undefined) delete process.env.DSH_DECISIONS_CACHE_DIAGNOSTICS
+        else process.env.DSH_DECISIONS_CACHE_DIAGNOSTICS = original
+      }
       const preExecute = host.listeners.get('tools/pre-execute')
       return {
         send: (session, overrides) => preExecute(makeExec(session, overrides), async () => ({ kind: 'allow' })),
@@ -211,6 +219,48 @@ describe('decisions engine through the approval entry point', () => {
       session.surface.nodes.push(seq + 1, seq + 3)
       return { callId: id, rootCallId: id, arguments: { command } }
     }
+
+    test('does not log cache diagnostic records by default', async () => {
+      const { send } = start()
+      await send(makeSession('diagnostics-off'))
+      expect(lastRecord().event).toBe('review')
+      expect(fs.readFileSync(path.join(profileDir, 'decision-review.log.jsonl'), 'utf8')).not.toContain(
+        'decisions-cache-diagnostic',
+      )
+    })
+
+    test('records bounded content-free diagnostics for a retained prefix, rewrite, and failed request', async () => {
+      const session = makeSession('diagnostic-session')
+      const secret = 'synthetic-do-not-log-history'
+      session.snapshotEvents()[0].data.content[0].text = secret
+      const { send } = start((_body, _init, call) => {
+        if (call === 4) throw new Error('synthetic-do-not-log-error')
+        return call === 1
+          ? { answers: makeAnswers(), usage: { input_tokens_details: { cached_tokens: 0, cache_write_tokens: 2048 } } }
+          : makeAnswers()
+      }, true)
+      await send(session)
+      await send(session, appendTurn(session, 1))
+      session.snapshotEvents()[0].data.content[0].text = 'synthetic-do-not-log-rewrite'
+      await send(session, appendTurn(session, 2))
+      await send(session, appendTurn(session, 3))
+
+      const rows = fs
+        .readFileSync(path.join(profileDir, 'decision-review.log.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line))
+        .filter((entry) => entry.event === 'decisions-cache-diagnostic')
+      expect(rows).toHaveLength(4)
+      const [first, second, third, fourth] = rows.map((row) => row.diagnostic)
+      expect(first).toMatchObject({ order: 1, outcome: 'success', cachedTokens: 0, cacheWriteTokens: 2048 })
+      expect(second).toMatchObject({ instance: first.instance, scope: first.scope, order: 2, cachedTokens: null })
+      expect(second.candidates).toEqual([expect.objectContaining({ order: 1, comparison: 'match', state: 'settled' })])
+      expect(second.markers).toEqual([{ ...first.markers[0], tail: false }, expect.objectContaining({ tail: true })])
+      expect(third.candidates.map(({ comparison }) => comparison)).toEqual(['prefix-changed', 'prefix-changed'])
+      expect(fourth).toMatchObject({ outcome: 'transport', httpStatus: null, cachedTokens: null })
+      expect(JSON.stringify(rows)).not.toContain('synthetic-do-not-log')
+    })
 
     test('reuses the exact previous history boundary while marking the extended history tail', async () => {
       const session = makeSession('growing')
@@ -317,14 +367,124 @@ describe('decisions engine through the approval entry point', () => {
       expect(boundaries(body(1))).toStrictEqual([tail(body(1))])
     })
 
-    test('keeps the last three eligible boundaries and the latest tail', async () => {
+    test('pins the earliest matching boundary established after a write and rolls other markers', async () => {
       const session = makeSession('bounded')
-      const { send, body } = start()
+      const { send, body } = start((_body, _init, call) =>
+        call === 2
+          ? { answers: makeAnswers(), usage: { input_tokens_details: { cache_write_tokens: 2048 } } }
+          : makeAnswers(),
+      )
       await send(session)
-      for (let turn = 1; turn <= 5; turn++) await send(session, appendTurn(session, turn))
+      for (let turn = 1; turn <= 7; turn++) await send(session, appendTurn(session, turn))
 
-      expect(boundaries(body(5))).toStrictEqual([2, 3, 4, 5].map((index) => tail(body(index))))
+      for (let turn = 4; turn <= 7; turn++) {
+        expect(boundaries(body(turn))).toStrictEqual([1, turn - 2, turn - 1, turn].map((index) => tail(body(index))))
+      }
+      const next = appendTurn(session, 8)
+      session.snapshotEvents()[0].data.content[0].text = 'Replacement workflow.'
+      await send(session, next)
+      await send(session, appendTurn(session, 9))
+      expect(boundaries(body(8))).toStrictEqual([tail(body(8))])
+      expect(boundaries(body(9))).toStrictEqual([tail(body(8)), tail(body(9))])
     })
+
+    test('holds a newer checkpoint through rolling turns and replaces it only after its prefix changes', async () => {
+      const session = makeSession('checkpoint-trial')
+      const { send, body } = start((_body, _init, call) => {
+        if (call === 5) throw new Error('synthetic offline failure')
+        return { answers: makeAnswers(), usage: { input_tokens_details: { cache_write_tokens: 2048 } } }
+      }, true)
+      await send(session)
+      for (let turn = 1; turn <= 7; turn++) await send(session, appendTurn(session, turn))
+      expect(boundaries(body(7))).toStrictEqual([0, 1, 6, 7].map((index) => tail(body(index))))
+
+      const next = appendTurn(session, 8)
+      session.snapshotEvents()[5].data.content[0].text = 'Replace the second instruction only.'
+      await send(session, next)
+      expect(boundaries(body(8))).toStrictEqual([tail(body(0)), tail(body(8))])
+      for (let turn = 9; turn <= 12; turn++) await send(session, appendTurn(session, turn))
+      expect(boundaries(body(12))).toStrictEqual([0, 8, 11, 12].map((index) => tail(body(index))))
+
+      const traces = fs
+        .readFileSync(path.join(profileDir, 'decision-review.log.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line))
+        .filter(({ event }) => event === 'decisions-cache-diagnostic')
+      expect(traces[4].diagnostic).toMatchObject({ outcome: 'transport', checkpointSuccessfulOffers: 2 })
+      expect(traces[5].diagnostic).toMatchObject({ checkpointSuccessfulOffers: 2 })
+      expect(traces[8].diagnostic).toMatchObject({
+        anchorBlock: tail(body(0)),
+        checkpointBlock: null,
+        settledCheckpointBlock: tail(body(8)),
+      })
+    })
+
+    test.each(['promote', 'rollback', 'rewrite', 'stale', 'overlap'])(
+      'experiments sparsely with the newer checkpoint: %s',
+      async (outcome) => {
+        const session = makeSession('promotion-trial')
+        const started = Promise.withResolvers()
+        const release = Promise.withResolvers()
+        const { send, body } = start(async (_body, _init, call) => {
+          if (outcome === 'rollback' && call === 11) throw new Error('synthetic offline failure')
+          if ((outcome === 'stale' || outcome === 'overlap') && call === 11) {
+            started.resolve()
+            await release.promise
+          }
+          const read = outcome === 'rollback' && call >= 12 ? 0 : call === 11 && outcome !== 'rewrite' ? 4096 : 2048
+          return {
+            answers: makeAnswers(),
+            usage: { input_tokens_details: { cached_tokens: read, cache_write_tokens: 512 } },
+          }
+        })
+        await send(session)
+        for (let turn = 1; turn <= 9; turn++) await send(session, appendTurn(session, turn))
+
+        const next = appendTurn(session, 10)
+        if (outcome === 'rewrite') session.snapshotEvents()[5].data.content[0].text = 'Replace the second instruction.'
+        const first = send(session, next)
+        if (outcome === 'stale' || outcome === 'overlap') {
+          try {
+            await started.promise
+            const rewrite = appendTurn(session, 11)
+            if (outcome === 'stale')
+              session.snapshotEvents()[5].data.content[0].text = 'Replace the second instruction.'
+            await send(session, rewrite)
+          } finally {
+            release.resolve()
+            await first
+          }
+        } else await first
+
+        if (outcome === 'rewrite') {
+          expect(boundaries(body(10))).toStrictEqual([0, 10].map((index) => tail(body(index))))
+          return
+        }
+        expect(boundaries(body(10))).toStrictEqual([0, 9, 10].map((index) => tail(body(index))))
+        if (outcome === 'overlap') {
+          expect(boundaries(body(11))).toStrictEqual([0, 1, 9, 11].map((index) => tail(body(index))))
+          await send(session, appendTurn(session, 12))
+          expect(boundaries(body(12))).toStrictEqual([0, 9, 12].map((index) => tail(body(index))))
+          return
+        }
+        if (outcome === 'stale') {
+          await send(session, appendTurn(session, 12))
+          expect(boundaries(body(12))).toStrictEqual([0, 11, 12].map((index) => tail(body(index))))
+          return
+        }
+        await send(session, appendTurn(session, 11))
+        if (outcome === 'promote') {
+          expect(boundaries(body(11))).toStrictEqual([0, 9, 10, 11].map((index) => tail(body(index))))
+          return
+        }
+        await send(session, appendTurn(session, 12))
+        expect(boundaries(body(11))).toStrictEqual([0, 9, 11].map((index) => tail(body(index))))
+        expect(boundaries(body(12))).toStrictEqual([0, 9, 12].map((index) => tail(body(index))))
+        await send(session, appendTurn(session, 13))
+        expect(boundaries(body(13))).toStrictEqual([0, 1, 12, 13].map((index) => tail(body(index))))
+      },
+    )
 
     test('drops a failed tail without losing a prior successful boundary', async () => {
       const session = makeSession('failed')
@@ -340,6 +500,61 @@ describe('decisions engine through the approval entry point', () => {
       await send(session, appendTurn(session, 2))
 
       expect(boundaries(body(2))).toStrictEqual([tail(body(0)), tail(body(2))])
+    })
+
+    test('preserves a matching anchor established while the next request was in flight', async () => {
+      const started = [Promise.withResolvers(), Promise.withResolvers()]
+      const release = [Promise.withResolvers(), Promise.withResolvers()]
+      const session = makeSession('new-anchor')
+      const { send, body } = start(async (_body, _init, call) => {
+        if (call <= 2) {
+          started[call - 1].resolve()
+          await release[call - 1].promise
+        }
+        return {
+          answers: makeAnswers(),
+          usage: { input_tokens_details: { cache_write_tokens: call === 1 ? 2048 : 0 } },
+        }
+      })
+      const first = send(session)
+      await started[0].promise
+      const second = send(session, appendTurn(session, 1))
+      try {
+        await started[1].promise
+        release[0].resolve()
+        await first
+      } finally {
+        release[1].resolve()
+        await second
+      }
+      for (let turn = 2; turn <= 6; turn++) await send(session, appendTurn(session, turn))
+      expect(boundaries(body(6))).toStrictEqual([0, 4, 5, 6].map((index) => tail(body(index))))
+    })
+
+    test('does not restore an old anchor when a stale success arrives after a rewrite', async () => {
+      const started = Promise.withResolvers()
+      const release = Promise.withResolvers()
+      const session = makeSession('stale-anchor')
+      const { send, body } = start(async (_body, _init, call) => {
+        if (call === 2) {
+          started.resolve()
+          await release.promise
+        }
+        return { answers: makeAnswers(), usage: { input_tokens_details: { cache_write_tokens: 2048 } } }
+      })
+      await send(session)
+      const old = send(session, appendTurn(session, 1))
+      try {
+        await started.promise
+        const next = appendTurn(session, 2)
+        session.snapshotEvents()[0].data.content[0].text = 'Replacement workflow.'
+        await send(session, next)
+      } finally {
+        release.resolve()
+        await old
+      }
+      for (let turn = 3; turn <= 7; turn++) await send(session, appendTurn(session, turn))
+      expect(boundaries(body(7))).toStrictEqual([2, 3, 6, 7].map((index) => tail(body(index))))
     })
 
     test('inherits matching in-flight boundaries and retains newer ones after out-of-order responses', async () => {

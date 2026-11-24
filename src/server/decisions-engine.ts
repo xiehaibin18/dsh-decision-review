@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
@@ -241,6 +242,7 @@ export async function requestDecisions(
   settings: Settings,
   body: ReturnType<typeof decisionsBody>,
   signal: AbortSignal,
+  onHttpStatus?: (status: number) => void,
 ) {
   const response = await fetch(settings.endpoint, {
     method: 'POST',
@@ -248,6 +250,7 @@ export async function requestDecisions(
     body: JSON.stringify(body),
     signal: AbortSignal.any([signal, AbortSignal.timeout(settings.timeoutMs)]),
   })
+  onHttpStatus?.(response.status)
   if (!response.ok) {
     const text = await response.text()
     throw new Error(`decisions HTTP ${response.status}: ${text.slice(0, 300)}`)
@@ -267,7 +270,20 @@ export function decisionsBody(settings: Settings, input: DecisionMessage[], cach
   }
 }
 
-export type DecisionCaches = WeakMap<Settings, WeakMap<Agent['session'], DecisionBreakpoints>>
+export function createDecisionDiagnostics(record?: (session: string, callId: string, diagnostic: unknown) => void) {
+  const instance = record ? randomUUID() : undefined
+  const build = 'dsh-cache-diag-v4-promotion'
+  const caches = new WeakMap<
+    Settings,
+    {
+      generation: number
+      sessions: WeakMap<Agent['session'], { scope: number; boundaries: DecisionBreakpoints }>
+    }
+  >()
+  let generation = 0
+  let scope = 0
+  return { instance, build, caches, record, nextGeneration: () => ++generation, nextScope: () => ++scope }
+}
 
 /** Review one pending action through the OpenAI Decisions API. */
 export async function decisionsClassifyRisk(
@@ -277,17 +293,17 @@ export async function decisionsClassifyRisk(
   signal: AbortSignal,
   shown: ShownSchemas,
   settings: Settings,
-  caches: DecisionCaches,
+  diagnostics: ReturnType<typeof createDecisionDiagnostics>,
 ) {
-  let bySession = caches.get(settings)
-  if (!bySession) {
-    bySession = new WeakMap()
-    caches.set(settings, bySession)
+  let generation = diagnostics.caches.get(settings)
+  if (!generation) {
+    generation = { generation: diagnostics.nextGeneration(), sessions: new WeakMap() }
+    diagnostics.caches.set(settings, generation)
   }
-  let boundaries = bySession.get(agent.session)
-  if (!boundaries) {
-    boundaries = new DecisionBreakpoints()
-    bySession.set(agent.session, boundaries)
+  let scope = generation.sessions.get(agent.session)
+  if (!scope) {
+    scope = { scope: diagnostics.nextScope(), boundaries: new DecisionBreakpoints() }
+    generation.sessions.set(agent.session, scope)
   }
   const started = Date.now()
   const cwd = await ctx.workingDirectory.ensure(agent, signal)
@@ -299,14 +315,71 @@ export async function decisionsClassifyRisk(
     decisionsMessages(snapshot.history.slice(0, -1), pendingEntry, cwd),
     `decision-review:${agent.session.id}`,
   )
-  const settle = boundaries.prepare(body.input[0].content)
-  const { usage, answers } = await requestDecisions(settings, body, signal).then(
+  const trace = scope.boundaries.prepare(body.input[0].content)
+  let httpStatus: number | undefined
+  function emit(
+    outcome: string,
+    usage?: unknown,
+    settled?: {
+      transition: string
+      settledAnchorBlock: number | null
+      settledCheckpointBlock: number | null
+      settledCheckpointSuccessfulOffers: number | null
+    },
+  ) {
+    if (!diagnostics.record) return
+    try {
+      const counts = isRecord(usage) ? usage : {}
+      const details = isRecord(counts.input_tokens_details) ? counts.input_tokens_details : {}
+      const count = (value: unknown) =>
+        typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+      diagnostics.record(agent.session.id, exec.callId, {
+        build: diagnostics.build,
+        instance: diagnostics.instance,
+        generation: generation?.generation,
+        scope: scope?.scope,
+        ...trace.metadata,
+        outcome,
+        ...settled,
+        httpStatus: httpStatus ?? null,
+        elapsedMs: Date.now() - started,
+        inputTokens: count(counts.input_tokens),
+        outputTokens: count(counts.output_tokens),
+        cachedTokens: count(details.cached_tokens),
+        cacheWriteTokens: count(details.cache_write_tokens),
+      })
+    } catch {
+      /* Diagnostic output cannot affect review routing. */
+    }
+  }
+  const { usage, answers } = await requestDecisions(settings, body, signal, (status) => {
+    httpStatus = status
+  }).then(
     (result) => {
-      settle?.(true)
+      const details = isRecord(result.usage) ? result.usage.input_tokens_details : undefined
+      const writes = isRecord(details) ? details.cache_write_tokens : undefined
+      const reads = isRecord(details) ? details.cached_tokens : undefined
+      const settled = trace.settle(
+        true,
+        typeof writes === 'number' && Number.isFinite(writes) && writes > 0,
+        typeof reads === 'number' && Number.isFinite(reads) && reads >= 0 ? reads : null,
+      )
+      emit('success', result.usage, settled)
       return result
     },
     (error: unknown) => {
-      settle?.(false)
+      trace.settle(false)
+      emit(
+        error instanceof Error && error.name === 'TimeoutError'
+          ? 'timeout'
+          : signal.aborted
+            ? 'aborted'
+            : httpStatus === undefined
+              ? 'transport'
+              : httpStatus >= 200 && httpStatus < 300
+                ? 'invalid-response'
+                : 'http-error',
+      )
       throw error
     },
   )

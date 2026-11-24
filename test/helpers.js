@@ -14,6 +14,8 @@ export function stubDecisionsFetch(answersFor) {
   return fetchDecisions.mockImplementation(async (_url, init) => {
     const body = JSON.parse(init.body)
     const answers = await answersFor(body, init, fetchDecisions.mock.calls.length)
-    return new Response(JSON.stringify({ answers }), { headers: { 'content-type': 'application/json' } })
+    return new Response(JSON.stringify(Array.isArray(answers) ? { answers } : answers), {
+      headers: { 'content-type': 'application/json' },
+    })
   })
 }
