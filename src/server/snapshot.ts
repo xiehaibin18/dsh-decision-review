@@ -1,7 +1,7 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-instructions'
 import type {} from '@deepseek-ai/dsh-compaction'
-import type { ContentBlock, MessageSource, ToolCallId, ToolSchema } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, MessageSource, TextBlock, ToolCallId, ToolSchema } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-subagent'
 import type {} from '@deepseek-ai/dsh-tool-executor-ptc/types'
@@ -16,6 +16,12 @@ interface HistoricalUserMessage {
   role: ReviewSourceRole
   source: MessageSource
   content: readonly ContentBlock[]
+}
+
+interface HistoricalAssistantReference {
+  kind: 'assistant-reference'
+  role: 'fact'
+  content: readonly TextBlock[]
 }
 
 interface HistoricalToolCall {
@@ -35,7 +41,8 @@ interface HistoricalToolSchema {
   parameters: Record<string, unknown>
 }
 
-export type HistoricalEntry = HistoricalUserMessage | HistoricalToolCall | HistoricalToolSchema
+export type HistoricalEntry =
+  HistoricalUserMessage | HistoricalAssistantReference | HistoricalToolCall | HistoricalToolSchema
 export type ShownSchemas = Map<string, HistoricalToolSchema>
 
 export interface ReviewSnapshot {
@@ -172,6 +179,10 @@ function filteredUserEntries(
   }))
 }
 
+function isVisibleText(block: ContentBlock): boolean {
+  return block.type === 'text' && block.text.trim() !== ''
+}
+
 /** Copy the turn and step identity carried by one core execution event. */
 function stepIdentity(data: StepIdentity): StepIdentity {
   return { turn: data.turn, step: data.step }
@@ -271,7 +282,7 @@ function shownSchemaKey(mode: CallMode, scopedKey: string): string {
 
 /**
  * Freeze the reviewer input from one session and pending execution.
- * Uses the official plugin's snapshot algorithm without a runtime host import.
+ * Reconstructs pending tool calls from the session log and adds reply references in surface order.
  */
 export function snapshotAutoReview(
   agent: Agent,
@@ -342,23 +353,46 @@ export function snapshotAutoReview(
   }
   const visibleParentKeys = new Set<string>()
   let passedCurrentRoot = false
+  let assistantReply: readonly ContentBlock[] | undefined
   for (const seq of nodes) {
     const event = events[seq]
     if (event.type === 'user/message') {
-      if (event.data.source.kind === 'tool') continue
       if (isProjectInstruction(event.data.source)) {
         const content = event.data.content
         if (content.length > 0) {
           history.push({ kind: 'user-message', role: 'constraint', source: event.data.source, content })
         }
-      } else {
-        history.push(...filteredUserEntries(event.seq, event.data.source, event.data.content, prompts, session))
+        continue
       }
+      const previousReply = assistantReply
+      assistantReply = undefined
+      if (event.data.source.kind === 'tool') continue
+      const entries: HistoricalEntry[] = filteredUserEntries(
+        event.seq,
+        event.data.source,
+        event.data.content,
+        prompts,
+        session,
+      )
+      if (previousReply && session.isOwnSeq(seq) && previousReply.some(isVisibleText)) {
+        const instruction = entries.findIndex(
+          (entry) => entry.role === 'user-instruction' && entry.content.some(isVisibleText),
+        )
+        if (instruction !== -1) {
+          const content = previousReply.flatMap<TextBlock>((block) =>
+            block.type === 'text' ? [{ type: 'text', text: block.text }] : [],
+          )
+          entries.splice(instruction, 0, { kind: 'assistant-reference', role: 'fact', content })
+        }
+      }
+      history.push(...entries)
       continue
     }
+    if (event.type === 'tool/result') assistantReply = undefined
     if (event.type !== 'assistant/message') continue
     const messageStep = stepIdentity(event.data)
     const isCurrentMessage = sameStep(messageStep, currentStep)
+    assistantReply = !isCurrentMessage && session.isOwnSeq(seq) ? event.data.message.content : undefined
     let sawUnstartedSibling = false
     for (const block of event.data.message.content) {
       if (block.type !== 'tool-call') continue
