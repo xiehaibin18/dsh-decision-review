@@ -391,4 +391,97 @@ describe('effective authorization request contract', () => {
     const entries = request.input[0].content.slice(1).map(({ text }) => JSON.parse(text))
     expect(entries.map(({ kind }) => kind)).not.toContain('assistant-reference')
   })
+
+  const firstPlan = { ...assistant(text('1. Run the staging checks.')), surfaceOp: 'append' }
+  const laterPlan = { ...assistant(text('1. Deploy blue to production once.')), surfaceOp: 'append' }
+  const queuedReply = {
+    ...input(user, text('Do 1.')).data,
+    id: 'queued-user-reply',
+    role: 'user',
+  }
+  const inbox = (target, inserted, removal = {}) => ({
+    type: 'agent/inbox/spliced',
+    data: { target, start: 0, inserted, ...removal },
+  })
+  const submit = inbox('next-turn', [queuedReply])
+  const claim = inbox('next-turn', [], { removedCount: 1 })
+  const remove = inbox('next-turn', [], { removedCount: 1, outcome: 'canceled' })
+  const steer = inbox('next-step', [queuedReply])
+  const claimSteering = inbox('next-step', [], { removedCount: 1 })
+  const admit = { type: 'user/message', data: queuedReply, surfaceOp: 'append' }
+  const editedReply = { ...queuedReply, content: [text('Do option 1 only.')] }
+  const edit = inbox('next-turn', [editedReply], { removedCount: 1, outcome: 'canceled' })
+  const admitEdit = { ...admit, data: editedReply }
+  const earlierQueuedReply = { ...queuedReply, id: 'earlier-queued-user-reply', content: [text('Check staging.')] }
+  const checkpoint = {
+    ...input({ kind: 'compact-checkpoint' }, text('Compaction summary')),
+    surfaceOp: { op: 'replace', startSeq: 0, endSeq: 0 },
+    sourceEventSeqs: [0],
+  }
+
+  test.each([
+    { name: 'before a proposal', history: [submit, laterPlan, claim, admit] },
+    { name: 'after a proposal', history: [laterPlan, submit, claim, admit], expected: laterPlan },
+    { name: 'between two proposals', history: [firstPlan, submit, laterPlan, claim, admit], expected: firstPlan },
+    {
+      name: 'before a proposal and then moved to steering',
+      history: [submit, laterPlan, remove, steer, claimSteering, admit],
+    },
+    {
+      name: 'between two proposals and then moved to steering',
+      history: [firstPlan, submit, laterPlan, remove, steer, claimSteering, admit],
+      expected: firstPlan,
+    },
+    { name: 'between two proposals and then edited', history: [firstPlan, submit, laterPlan, edit, claim, admitEdit] },
+    {
+      name: 'after a still-pending user submission under the same proposal',
+      history: [
+        firstPlan,
+        inbox('next-turn', [earlierQueuedReply]),
+        inbox('next-turn', [queuedReply], { start: 1 }),
+        inbox('next-turn', [], { start: 1, removedCount: 1, outcome: 'canceled' }),
+        steer,
+        claimSteering,
+        admit,
+      ],
+    },
+    {
+      name: 'after a preceding proposal was compacted',
+      history: [firstPlan, checkpoint, submit, laterPlan, claim, admit],
+      nodes: [1, 3, 5],
+    },
+    {
+      name: 'before its preceding proposal was compacted',
+      history: [firstPlan, submit, checkpoint, laterPlan, claim, admit],
+      nodes: [2, 3, 5],
+    },
+    {
+      name: 'in an inherited inbox and then moved',
+      history: [submit, laterPlan, remove, steer, claimSteering, admit],
+      inheritedCount: 1,
+    },
+  ])(
+    'uses the durable first submission for a reply sent $name',
+    async ({
+      history,
+      expected,
+      inheritedCount,
+      nodes = history.flatMap((event, seq) => (event.surfaceOp === 'append' ? [seq] : [])),
+    }) => {
+      const fetchDecisions = stubDecisionsFetch(() => makeAnswers())
+      await expect(
+        review('decisions', fixture(history, { nodes, inheritedCount, child: false })),
+      ).resolves.toMatchObject({
+        kind: 'allow',
+      })
+      const request = JSON.parse(fetchDecisions.mock.calls[0][1].body)
+      const entries = request.input[0].content.slice(1).map(({ text }) => JSON.parse(text))
+      const reply = entries.findIndex(({ role }) => role === 'user-instruction')
+      expect(reply).toBeGreaterThanOrEqual(0)
+      expect(entries.filter(({ kind }) => kind === 'assistant-reference')).toStrictEqual(
+        expected ? [{ kind: 'assistant-reference', role: 'fact', content: expected.data.message.content }] : [],
+      )
+      if (expected) expect(entries[reply - 1]?.kind).toBe('assistant-reference')
+    },
+  )
 })

@@ -1,7 +1,15 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-instructions'
 import type {} from '@deepseek-ai/dsh-compaction'
-import type { ContentBlock, MessageSource, TextBlock, ToolCallId, ToolSchema } from '@deepseek-ai/dsh-llm'
+import type {
+  ContentBlock,
+  MessageId,
+  MessageSource,
+  TextBlock,
+  ToolCallId,
+  ToolSchema,
+  UserMessage,
+} from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-subagent'
 import type {} from '@deepseek-ai/dsh-tool-executor-ptc/types'
@@ -53,11 +61,18 @@ export interface ReviewSnapshot {
   pending: { key: string; schema: HistoricalToolSchema }
 }
 
+type AssistantMessageEvent = SessionEvent<'assistant/message'>
 type NativeCallEvent = Extract<SessionEvent, { type: 'tool/call' }>
 type PtcStartEvent = Extract<SessionEvent, { type: 'tool/ptc-dispatch-start' }>
 type StepIdentity = { readonly turn: number; readonly step: number }
 type ScopedPtcStart = { event: PtcStartEvent; step: StepIdentity }
 type CreationPrompts = { own: SessionEvent['seq'] | undefined; all: ReadonlySet<SessionEvent['seq']> }
+
+interface QueuedSubmission {
+  seq: SessionEvent['seq']
+  message: UserMessage
+  assistant: AssistantMessageEvent | undefined
+}
 
 /** Recreate the agent-loop's parse of one native call's logged raw arguments. */
 function parseLoggedArguments(raw: string): unknown {
@@ -183,6 +198,66 @@ function isVisibleText(block: ContentBlock): boolean {
   return block.type === 'text' && block.text.trim() !== ''
 }
 
+function isConversationBoundary(event: SessionEvent): boolean {
+  return (
+    event.type === 'assistant/message' ||
+    event.type === 'tool/result' ||
+    (event.type === 'user/message' && !isProjectInstruction(event.data.source))
+  )
+}
+
+function samePrompt(left: UserMessage, right: UserMessage): boolean {
+  return sameJson(left.source, right.source) && sameJson(left.content, right.content)
+}
+
+/** Index the conversation position at each original inbox submission. */
+function queuedSubmissions(events: readonly SessionEvent[], session: Session): Map<MessageId, QueuedSubmission> {
+  const submissions = new Map<MessageId, QueuedSubmission>()
+  let surface: SessionEvent['seq'][] | undefined = []
+  let lastUserSubmission = -1
+  for (const event of events) {
+    if (event.type !== 'agent/inbox/spliced') {
+      const op = event.surfaceOp
+      if (surface === undefined || op === undefined) continue
+      if (op === 'append') {
+        surface.push(event.seq)
+      } else {
+        const start = surface.indexOf(op.startSeq)
+        const end = surface.indexOf(op.endSeq)
+        if (start < 0 || end < start) surface = undefined
+        else surface.splice(start, end - start + 1, event.seq)
+      }
+      continue
+    }
+
+    for (const message of event.data.inserted) {
+      const first = submissions.get(message.id)
+      if (first !== undefined) {
+        // Moving a message between queues preserves its identity. Edits leave its referent uncertain.
+        if (first.assistant !== undefined && !samePrompt(first.message, message)) first.assistant = undefined
+        continue
+      }
+      let assistant: AssistantMessageEvent | undefined
+      if (message.source.kind === 'user') {
+        if (session.isOwnSeq(event.seq) && !event.data.removedCount && event.data.inserted.length === 1) {
+          const preceding = surface?.findLast((seq) => isConversationBoundary(events[seq]))
+          const candidate = preceding === undefined ? undefined : events[preceding]
+          if (
+            candidate?.type === 'assistant/message' &&
+            candidate.seq > lastUserSubmission &&
+            session.isOwnSeq(candidate.seq)
+          ) {
+            assistant = candidate
+          }
+        }
+        lastUserSubmission = event.seq
+      }
+      submissions.set(message.id, { seq: event.seq, message, assistant })
+    }
+  }
+  return submissions
+}
+
 /** Copy the turn and step identity carried by one core execution event. */
 function stepIdentity(data: StepIdentity): StepIdentity {
   return { turn: data.turn, step: data.step }
@@ -302,6 +377,8 @@ export function snapshotAutoReview(
   const nativeCalls = events.filter((event) => event.type === 'tool/call')
   const { starts, openStep: currentStep } = scopePtcStarts(events)
   const prompts = creationPrompts(agent, events)
+  const submissions = queuedSubmissions(events, session)
+  const retained = new Set(nodes)
   const nativeByScopedId = new Map<string, NativeCallEvent[]>()
   for (const event of nativeCalls) {
     const key = scopedCallKey(stepIdentity(event.data), event.data.callId)
@@ -353,7 +430,7 @@ export function snapshotAutoReview(
   }
   const visibleParentKeys = new Set<string>()
   let passedCurrentRoot = false
-  let assistantReply: readonly ContentBlock[] | undefined
+  let assistantReply: AssistantMessageEvent | undefined
   for (const seq of nodes) {
     const event = events[seq]
     if (event.type === 'user/message') {
@@ -364,7 +441,7 @@ export function snapshotAutoReview(
         }
         continue
       }
-      const previousReply = assistantReply
+      const adjacentAssistant = assistantReply
       assistantReply = undefined
       if (event.data.source.kind === 'tool') continue
       const entries: HistoricalEntry[] = filteredUserEntries(
@@ -374,6 +451,19 @@ export function snapshotAutoReview(
         prompts,
         session,
       )
+      const submission = submissions.get(event.data.id)
+      let reply = adjacentAssistant
+      if (submission !== undefined) {
+        const original = submission.assistant
+        reply =
+          original !== undefined &&
+          submission.seq < seq &&
+          retained.has(original.seq) &&
+          samePrompt(submission.message, event.data)
+            ? original
+            : undefined
+      }
+      const previousReply = reply?.data.message.content
       if (previousReply && session.isOwnSeq(seq) && previousReply.some(isVisibleText)) {
         const instruction = entries.findIndex(
           (entry) => entry.role === 'user-instruction' && entry.content.some(isVisibleText),
@@ -392,7 +482,7 @@ export function snapshotAutoReview(
     if (event.type !== 'assistant/message') continue
     const messageStep = stepIdentity(event.data)
     const isCurrentMessage = sameStep(messageStep, currentStep)
-    assistantReply = !isCurrentMessage && session.isOwnSeq(seq) ? event.data.message.content : undefined
+    assistantReply = !isCurrentMessage && session.isOwnSeq(seq) ? event : undefined
     let sawUnstartedSibling = false
     for (const block of event.data.message.content) {
       if (block.type !== 'tool-call') continue

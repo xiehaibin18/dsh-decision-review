@@ -18,6 +18,8 @@ Both engines consume the same complete `snapshotAutoReview` projection (includin
 
 When both messages originate in the current Session, the reviewer can see the assistant reply that immediately precedes a user instruction. The snapshot puts that reply's visible text directly before the user instruction as an `assistant-reference` fact and preserves its text and block order. Host system messages, tool registry updates, and project instructions can appear between the two messages. The user instruction is the source of any authorization. Tool outputs, reasoning, and assistant text without an adjacent user instruction stay excluded.
 
+For queued replies, the first durable inbox submission establishes which assistant text was available. Moving a reply between queues keeps its original position. The snapshot omits the reference when an edit makes the connection uncertain or the proposal has left the retained history.
+
 Both reviewers are instructed to use the same effective-authorization policy in Session order: later instructions revoke or replace earlier authority only when they explicitly say so; unresolved conflicts block medium-risk approval. A direct-parent instruction can authorize a child task but cannot override a user restriction. Constraints only narrow scope, and checkpoints, tool schemas, tool-call facts, and source metadata cannot grant authorization. Authorization must cover the actual action, target, effects, scope, count, and duration. No instruction can authorize a high-risk action.
 
 ## Configuration
