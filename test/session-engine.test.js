@@ -217,24 +217,33 @@ describe('effective authorization request contract', () => {
     },
   ]
 
-  function fixture(messages) {
-    const session = makeSession('review-child', { origin: 'subagent', parentSession: 'parent' })
+  const text = (text) => ({ type: 'text', text })
+  const image = {
+    type: 'image',
+    attachment: { attachmentId: 'a'.repeat(64), mediaType: 'image/png', bytes: 68, width: 1, height: 1 },
+  }
+  const input = (source, ...content) => ({ type: 'user/message', data: { source, content } })
+  const assistant = (...content) => ({
+    type: 'assistant/message',
+    data: { turn: 0, step: 0, message: { content } },
+  })
+
+  function fixture(history, { nodes = history.map((_, seq) => seq), inheritedCount = 0, child = true } = {}) {
+    const session = makeSession(
+      'review-session',
+      child ? { origin: 'subagent', parentSession: 'parent' } : { isSeeded: inheritedCount > 0 },
+    )
     const events = session.snapshotEvents()
     const command = 'deploy --environment production --service blue'
     events[2].data.message.content[0].arguments = JSON.stringify({ command })
     events[3].data.arguments = JSON.stringify({ command })
-    events.splice(
-      0,
-      1,
-      ...messages.map(([source, , text]) => ({
-        type: 'user/message',
-        data: { source, content: [{ type: 'text', text }] },
-      })),
-    )
+    for (const event of events.slice(1)) event.data.turn = 1
+    events.splice(0, 1, ...history)
     events.forEach((event, seq) => {
       event.seq = seq
     })
-    session.surface.nodes = [...messages.map((_, seq) => seq), events.length - 2]
+    session.surface.nodes = [...nodes, events.length - 2]
+    session.isOwnSeq = (seq) => seq >= inheritedCount
     return makeExec(session, { arguments: { command } })
   }
 
@@ -262,7 +271,8 @@ describe('effective authorization request contract', () => {
           overrides: { explicit_authorization: { type: 'predicate', probability: allowed ? 1 : 0 } },
         }),
       )
-      const decisions = await review('decisions', fixture(messages))
+      const history = messages.map(([source, , content]) => input(source, text(content)))
+      const decisions = await review('decisions', fixture(history))
       const stream = mock(() =>
         streamOf([
           {
@@ -273,7 +283,7 @@ describe('effective authorization request contract', () => {
           STOP,
         ]),
       )
-      const session = await review('session', fixture(messages), { stream })
+      const session = await review('session', fixture(history), { stream })
       expect(fetchDecisions).toHaveBeenCalledTimes(1)
       expect(stream).toHaveBeenCalledTimes(1)
       const [[, { body }]] = fetchDecisions.mock.calls
@@ -298,6 +308,180 @@ describe('effective authorization request contract', () => {
       expect(retained(sessionRequest.messages.map(({ content }) => content[0]))).toStrictEqual(messages)
       expect(decisions.kind).toBe(allowed ? 'allow' : 'deny')
       expect(session.kind).toBe(decisions.kind)
+    },
+  )
+
+  test('both engines retain the immediately preceding assistant reply as a fact', async () => {
+    const first = text('1. Run the staging checks.\n\n')
+    const second = text('  2. Deploy blue to production once.  ')
+    const reply = text('Do 2.')
+    const instructions = { kind: 'agent-instructions' }
+    const constraint = text('Limit deployments to blue.')
+    const history = [
+      assistant(text('An older, unrelated proposal.')),
+      assistant(
+        first,
+        { type: 'reasoning', text: 'Private reasoning' },
+        image,
+        { type: 'tool-call', id: 'queued-call', name: 'bash', arguments: '{"command":"never-started"}' },
+        second,
+      ),
+      assistant(text('An assistant message that was replaced on the surface.')),
+      input(instructions, constraint),
+      input(user, image, reply),
+      { type: 'system/message', data: { message: { content: [text('Host prompt update')] } } },
+      { type: 'developer/message', data: { message: { content: [{ type: 'tool-addition', toolName: 'new-tool' }] } } },
+    ]
+    const exec = () => fixture(history, { nodes: [0, 1, 5, 6, 3, 4], child: false })
+    const fetchDecisions = stubDecisionsFetch(() => makeAnswers())
+    const stream = mock(() => streamOf([{ type: 'text-delta', index: 0, text: VERDICT }, STOP]))
+    await expect(review('decisions', exec())).resolves.toMatchObject({ kind: 'allow' })
+    await expect(review('session', exec(), { stream })).resolves.toMatchObject({ kind: 'allow' })
+
+    const request = JSON.parse(fetchDecisions.mock.calls[0][1].body)
+    const sessionRequest = stream.mock.calls[0][0]
+    const historyParts = (parts) => parts.slice(1).map(({ text }) => JSON.parse(text))
+    const expected = [
+      { kind: 'user-message', role: 'constraint', source: instructions, content: [constraint] },
+      { kind: 'user-message', role: 'fact', source: user, content: [image] },
+      { kind: 'assistant-reference', role: 'fact', content: [first, second] },
+      { kind: 'user-message', role: 'user-instruction', source: user, content: [reply] },
+      {
+        kind: 'tool-schema',
+        role: 'fact',
+        mode: 'native',
+        name: 'bash',
+        description: 'Run a command.',
+        parameters: { type: 'object' },
+      },
+    ]
+    expect(historyParts(request.input[0].content)).toStrictEqual(expected)
+    expect(historyParts(sessionRequest.messages.slice(0, -1).map(({ content }) => content[0]))).toStrictEqual(expected)
+  })
+
+  const proposal = assistant(text('1. Deploy blue to production once.'))
+  const reply = input(user, text('Do 1.'))
+  test.each([
+    ['an unanswered proposal', [proposal], {}],
+    ['an attachment-only user message', [proposal, input(user, image), reply], {}],
+    ['a user attachment with whitespace-only text', [proposal, input(user, image, text(' \n  ')), reply], {}],
+    [
+      'a later assistant message with no visible text',
+      [proposal, assistant({ type: 'reasoning', text: 'Private reasoning' }), reply],
+      {},
+    ],
+    [
+      'a tool result',
+      [proposal, { type: 'tool/result', data: { message: { content: [text('Tool output')] } } }, reply],
+      {},
+    ],
+    ['a parent instruction', [proposal, input(parent, text('Do 1.')), reply], {}],
+    ['an unverified child prompt', [proposal, input({ kind: 'user' }, text('Do 1.'))], {}],
+    [
+      'a compaction checkpoint',
+      [proposal, input({ kind: 'compact-checkpoint' }, text('Compaction summary')), reply],
+      {},
+    ],
+    ['a reply across a fork boundary', [proposal, reply], { child: false, inheritedCount: 1 }],
+    ['a reply in the inherited prefix', [proposal, reply], { child: false, inheritedCount: 2 }],
+  ])('omits assistant references for %s', async (_name, history, options) => {
+    const fetchDecisions = stubDecisionsFetch(() => makeAnswers())
+    await expect(review('decisions', fixture(history, options))).resolves.toMatchObject({ kind: 'allow' })
+    const request = JSON.parse(fetchDecisions.mock.calls[0][1].body)
+    const entries = request.input[0].content.slice(1).map(({ text }) => JSON.parse(text))
+    expect(entries.map(({ kind }) => kind)).not.toContain('assistant-reference')
+  })
+
+  const firstPlan = { ...assistant(text('1. Run the staging checks.')), surfaceOp: 'append' }
+  const laterPlan = { ...assistant(text('1. Deploy blue to production once.')), surfaceOp: 'append' }
+  const queuedReply = {
+    ...input(user, text('Do 1.')).data,
+    id: 'queued-user-reply',
+    role: 'user',
+  }
+  const inbox = (target, inserted, removal = {}) => ({
+    type: 'agent/inbox/spliced',
+    data: { target, start: 0, inserted, ...removal },
+  })
+  const submit = inbox('next-turn', [queuedReply])
+  const claim = inbox('next-turn', [], { removedCount: 1 })
+  const remove = inbox('next-turn', [], { removedCount: 1, outcome: 'canceled' })
+  const steer = inbox('next-step', [queuedReply])
+  const claimSteering = inbox('next-step', [], { removedCount: 1 })
+  const admit = { type: 'user/message', data: queuedReply, surfaceOp: 'append' }
+  const editedReply = { ...queuedReply, content: [text('Do option 1 only.')] }
+  const edit = inbox('next-turn', [editedReply], { removedCount: 1, outcome: 'canceled' })
+  const admitEdit = { ...admit, data: editedReply }
+  const earlierQueuedReply = { ...queuedReply, id: 'earlier-queued-user-reply', content: [text('Check staging.')] }
+  const checkpoint = {
+    ...input({ kind: 'compact-checkpoint' }, text('Compaction summary')),
+    surfaceOp: { op: 'replace', startSeq: 0, endSeq: 0 },
+    sourceEventSeqs: [0],
+  }
+
+  test.each([
+    { name: 'before a proposal', history: [submit, laterPlan, claim, admit] },
+    { name: 'after a proposal', history: [laterPlan, submit, claim, admit], expected: laterPlan },
+    { name: 'between two proposals', history: [firstPlan, submit, laterPlan, claim, admit], expected: firstPlan },
+    {
+      name: 'before a proposal and then moved to steering',
+      history: [submit, laterPlan, remove, steer, claimSteering, admit],
+    },
+    {
+      name: 'between two proposals and then moved to steering',
+      history: [firstPlan, submit, laterPlan, remove, steer, claimSteering, admit],
+      expected: firstPlan,
+    },
+    { name: 'between two proposals and then edited', history: [firstPlan, submit, laterPlan, edit, claim, admitEdit] },
+    {
+      name: 'after a still-pending user submission under the same proposal',
+      history: [
+        firstPlan,
+        inbox('next-turn', [earlierQueuedReply]),
+        inbox('next-turn', [queuedReply], { start: 1 }),
+        inbox('next-turn', [], { start: 1, removedCount: 1, outcome: 'canceled' }),
+        steer,
+        claimSteering,
+        admit,
+      ],
+    },
+    {
+      name: 'after a preceding proposal was compacted',
+      history: [firstPlan, checkpoint, submit, laterPlan, claim, admit],
+      nodes: [1, 3, 5],
+    },
+    {
+      name: 'before its preceding proposal was compacted',
+      history: [firstPlan, submit, checkpoint, laterPlan, claim, admit],
+      nodes: [2, 3, 5],
+    },
+    {
+      name: 'in an inherited inbox and then moved',
+      history: [submit, laterPlan, remove, steer, claimSteering, admit],
+      inheritedCount: 1,
+    },
+  ])(
+    'uses the durable first submission for a reply sent $name',
+    async ({
+      history,
+      expected,
+      inheritedCount,
+      nodes = history.flatMap((event, seq) => (event.surfaceOp === 'append' ? [seq] : [])),
+    }) => {
+      const fetchDecisions = stubDecisionsFetch(() => makeAnswers())
+      await expect(
+        review('decisions', fixture(history, { nodes, inheritedCount, child: false })),
+      ).resolves.toMatchObject({
+        kind: 'allow',
+      })
+      const request = JSON.parse(fetchDecisions.mock.calls[0][1].body)
+      const entries = request.input[0].content.slice(1).map(({ text }) => JSON.parse(text))
+      const reply = entries.findIndex(({ role }) => role === 'user-instruction')
+      expect(reply).toBeGreaterThanOrEqual(0)
+      expect(entries.filter(({ kind }) => kind === 'assistant-reference')).toStrictEqual(
+        expected ? [{ kind: 'assistant-reference', role: 'fact', content: expected.data.message.content }] : [],
+      )
+      if (expected) expect(entries[reply - 1]?.kind).toBe('assistant-reference')
     },
   )
 })
