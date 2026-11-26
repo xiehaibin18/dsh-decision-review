@@ -413,6 +413,7 @@ describe('effective authorization request contract', () => {
   const edit = inbox('next-turn', [editedReply], { removedCount: 1, outcome: 'canceled' })
   const admitEdit = { ...admit, data: editedReply }
   const earlierQueuedReply = { ...queuedReply, id: 'earlier-queued-user-reply', content: [text('Check staging.')] }
+  const canceledPrompt = { ...queuedReply, id: 'canceled-user-prompt', content: [text('Review the logs.')] }
   const checkpoint = {
     ...input({ kind: 'compact-checkpoint' }, text('Compaction summary')),
     surfaceOp: { op: 'replace', startSeq: 0, endSeq: 0 },
@@ -422,6 +423,30 @@ describe('effective authorization request contract', () => {
   test.each([
     { name: 'before a proposal', history: [submit, laterPlan, claim, admit] },
     { name: 'after a proposal', history: [laterPlan, submit, claim, admit], expected: laterPlan },
+    {
+      name: 'after a proposal and a canceled user submission',
+      history: [laterPlan, inbox('next-turn', [canceledPrompt]), remove, submit, claim, admit],
+      expected: laterPlan,
+    },
+    {
+      name: 'after another user submission was claimed before surface admission',
+      history: [laterPlan, inbox('next-turn', [earlierQueuedReply]), claim, submit, claim, admit],
+    },
+    {
+      name: 'after a later submission was canceled while an earlier moved submission stayed pending',
+      history: [
+        laterPlan,
+        inbox('next-turn', [earlierQueuedReply]),
+        remove,
+        inbox('next-step', [earlierQueuedReply]),
+        inbox('next-step', [canceledPrompt], { start: 1 }),
+        inbox('next-step', [], { start: 1, removedCount: 1, outcome: 'canceled' }),
+        submit,
+        inbox('next-step', [], { removedCount: 1, outcome: 'canceled' }),
+        claim,
+        admit,
+      ],
+    },
     { name: 'between two proposals', history: [firstPlan, submit, laterPlan, claim, admit], expected: firstPlan },
     {
       name: 'before a proposal and then moved to steering',
@@ -474,10 +499,16 @@ describe('effective authorization request contract', () => {
       ).resolves.toMatchObject({
         kind: 'allow',
       })
+      expect(fetchDecisions).toHaveBeenCalledTimes(1)
       const request = JSON.parse(fetchDecisions.mock.calls[0][1].body)
       const entries = request.input[0].content.slice(1).map(({ text }) => JSON.parse(text))
       const reply = entries.findIndex(({ role }) => role === 'user-instruction')
-      expect(reply).toBeGreaterThanOrEqual(0)
+      expect(entries[reply]).toStrictEqual({
+        kind: 'user-message',
+        role: 'user-instruction',
+        source: user,
+        content: history.findLast((event) => event.type === 'user/message').data.content,
+      })
       expect(entries.filter(({ kind }) => kind === 'assistant-reference')).toStrictEqual(
         expected ? [{ kind: 'assistant-reference', role: 'fact', content: expected.data.message.content }] : [],
       )

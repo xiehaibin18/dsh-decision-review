@@ -1,4 +1,4 @@
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, InboxTarget } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-instructions'
 import type {} from '@deepseek-ai/dsh-compaction'
 import type {
@@ -213,8 +213,9 @@ function samePrompt(left: UserMessage, right: UserMessage): boolean {
 /** Index the conversation position at each original inbox submission. */
 function queuedSubmissions(events: readonly SessionEvent[], session: Session): Map<MessageId, QueuedSubmission> {
   const submissions = new Map<MessageId, QueuedSubmission>()
+  const inboxes: Record<InboxTarget, QueuedSubmission[]> = { 'next-turn': [], 'next-step': [] }
   let surface: SessionEvent['seq'][] | undefined = []
-  let lastUserSubmission = -1
+  let lastClaimedUserSubmission = -1
   for (const event of events) {
     if (event.type !== 'agent/inbox/spliced') {
       const op = event.surfaceOp
@@ -230,29 +231,44 @@ function queuedSubmissions(events: readonly SessionEvent[], session: Session): M
       continue
     }
 
-    for (const message of event.data.inserted) {
+    const { target, start, removedCount = 0, inserted, outcome } = event.data
+    const insertedSubmissions = inserted.map((message) => {
       const first = submissions.get(message.id)
       if (first !== undefined) {
         // Moving a message between queues preserves its identity. Edits leave its referent uncertain.
         if (first.assistant !== undefined && !samePrompt(first.message, message)) first.assistant = undefined
-        continue
+        return first
       }
       let assistant: AssistantMessageEvent | undefined
-      if (message.source.kind === 'user') {
-        if (session.isOwnSeq(event.seq) && !event.data.removedCount && event.data.inserted.length === 1) {
-          const preceding = surface?.findLast((seq) => isConversationBoundary(events[seq]))
-          const candidate = preceding === undefined ? undefined : events[preceding]
-          if (
-            candidate?.type === 'assistant/message' &&
-            candidate.seq > lastUserSubmission &&
-            session.isOwnSeq(candidate.seq)
-          ) {
-            assistant = candidate
-          }
+      if (
+        message.source.kind === 'user' &&
+        session.isOwnSeq(event.seq) &&
+        removedCount === 0 &&
+        inserted.length === 1
+      ) {
+        const preceding = surface?.findLast((seq) => isConversationBoundary(events[seq]))
+        const candidate = preceding === undefined ? undefined : events[preceding]
+        if (
+          candidate?.type === 'assistant/message' &&
+          candidate.seq > lastClaimedUserSubmission &&
+          session.isOwnSeq(candidate.seq) &&
+          !Object.values(inboxes).some((queue) =>
+            queue.some(({ seq, message }) => seq > candidate.seq && message.source.kind === 'user'),
+          )
+        ) {
+          assistant = candidate
         }
-        lastUserSubmission = event.seq
       }
-      submissions.set(message.id, { seq: event.seq, message, assistant })
+      const submission = { seq: event.seq, message, assistant }
+      submissions.set(message.id, submission)
+      return submission
+    })
+    const removed = inboxes[target].splice(start, removedCount, ...insertedSubmissions)
+    // Unmarked removals are claims. They still separate a later submission from the proposal.
+    if (outcome !== 'canceled') {
+      for (const { seq, message } of removed) {
+        if (message.source.kind === 'user') lastClaimedUserSubmission = Math.max(lastClaimedUserSubmission, seq)
+      }
     }
   }
   return submissions
